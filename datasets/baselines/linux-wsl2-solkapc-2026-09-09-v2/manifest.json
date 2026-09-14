@@ -1,0 +1,13 @@
+{
+  "capture_end": "2026-09-09T13:02:18Z",
+  "capture_start": "2026-09-09T12:18:25Z",
+  "capturer_ref": "train_linux bring-up session, 423 unique cmdlines",
+  "extra": {},
+  "host_id": "6c4693eff740",
+  "os_version": "WSL2 Ubuntu 24.04.5 LTS",
+  "platform": "linux",
+  "sample_count": 423,
+  "sample_sha256": "1d38d400748c1dbf4eea8bd4cbec69a1333d0b08de3fba10428c466c617251c4",
+  "schema_version": 1,
+  "workload_label": "dev"
+}
