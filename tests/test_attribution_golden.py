@@ -12,8 +12,10 @@ import pytest
 np = pytest.importorskip("numpy")
 pytest.importorskip("onnx")
 
-from attribution_reference import attribute, load_forest
-from siblings import needs, sibling
+# These imports must follow the importorskip calls above, which skip the module when
+# the optional numpy/onnx dependencies are absent.
+from attribution_reference import attribute, load_forest  # noqa: E402
+from siblings import needs, sibling  # noqa: E402
 
 FIXTURES = sibling("agent", "crates", "ml", "tests", "fixtures")
 pytestmark = needs("agent", "crates", "ml", "tests", "fixtures", "attribution_golden.json")

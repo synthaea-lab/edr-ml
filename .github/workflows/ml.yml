@@ -51,18 +51,18 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Install tooling
-        # ruff pinned: unpinned, an unrelated ruff release can start flagging
-        # something that was always fine (RUF100 on the two now-removed
-        # DTZ001 noqa comments, found live when 0.17.0 landed mid-review and
-        # failed every PR touching ml/, main included — not a ml/ content bug).
-        run: pip install "ruff==0.17.0" pytest
+      - name: Install
+        # The dev extra pins ruff and mypy: unpinned, an unrelated release can start
+        # flagging something that was always fine (RUF100 on the two now-removed
+        # DTZ001 noqa comments, found live when ruff 0.17.0 landed mid-review and
+        # failed every PR touching ml/, main included — not a ml/ content bug). The
+        # package's own dependencies bring numpy/onnx, so the Rust/Python attribution
+        # parity tests really run here (they importorskip otherwise, silently
+        # weakening the seam) and mypy sees numpy's type information.
+        run: pip install -e ".[dev]"
       - name: ruff
         run: ruff check .
+      - name: mypy
+        run: mypy
       - name: pytest
-        # The dev extra carries numpy/onnx so the Rust/Python attribution parity
-        # tests really run here (they importorskip otherwise, silently weakening
-        # the seam).
-        run: |
-          pip install -e ".[dev]"
-          pytest tests
+        run: pytest tests
