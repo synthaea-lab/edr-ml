@@ -3,7 +3,7 @@
 ADR-0009 defined ``ExpectedDetection``/``ObservedDetection``/
 ``ScenarioReplayResult`` (in ``registry.training_record``) and the passing
 criterion (``compute_passed``), but nothing ever produced a
-``ScenarioReplayResult`` — PR #229/#232 (the ``lab/scenarios/*.yaml`` sidecars)
+``ScenarioReplayResult`` — PR #229/#232 (the scenario ``*.yaml`` sidecars)
 were explicitly scoped to format + conversion only, "pas de code moteur de
 replay". This module is that engine: given a scenario yaml and the
 ``alerts.ndjson`` a run against it produced, build the ``ScenarioReplayResult``
@@ -11,7 +11,7 @@ ADR-0009's schema and gate expect.
 
 **What this does NOT do:** run the scenario itself. The scenario's own
 ``script``/``platform`` fields name a `.sh`/`.ps1` that needs a real lab VM
-(Hyper-V, see ``lab/vagrant-hyperv/``) to execute meaningfully — automating
+(Hyper-V) to execute meaningfully — automating
 that orchestration is a separate concern (SSH/VM lifecycle, not detection
 matching) left for a follow-up. This module starts one step downstream: it
 takes an already-produced ``alerts.ndjson`` (from any run, lab or CI) and
@@ -48,7 +48,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def load_expected_detections(scenario_yaml: Path) -> tuple[str, list[ExpectedDetection]]:
-    """Parses a ``lab/scenarios/<name>.yaml`` sidecar's ``expected_detections``.
+    """Parses a ``scenarios/<name>.yaml`` sidecar's ``expected_detections``.
 
     Returns the scenario's ``name`` field (not the file stem — the sidecar's
     own ``name:`` is the source of truth, matching how the YAML is authored)
@@ -131,7 +131,7 @@ def run_replay(
     ``ObservedDetection`` copies that same ``ExpectedDetection``'s own
     ``rule``. This is sound exactly as long as no two rules in one scenario's
     ``expected_detections`` share an identical ``technique`` string — true for
-    every scenario in ``lab/scenarios/`` today (each rule there has a
+    every scenario in synthaea-lab/scenarios today (each rule there has a
     distinct, if sometimes combined, ATT&CK tag) — and is a real limitation
     worth knowing before adding a scenario that violates it: two same-
     technique rules would have their counts silently merged into whichever

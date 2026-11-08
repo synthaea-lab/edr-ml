@@ -1,12 +1,14 @@
-"""Sibling repositories of the Synthaea umbrella (``synthaea-lab/edr``).
+"""Sibling checkouts of the public Synthaea repositories (synthaea-lab/agent, server, ml,
+rules and scenarios).
 
-The ML pipeline is developed on its own, but it reads files owned by siblings: lab
-scenarios (ADR-0009 replays bind to them by content hash) and the agent's Rust parity
-fixtures. Checked out through the umbrella, siblings sit next to this repo::
+The ML pipeline is developed on its own, but it reads files owned by siblings: the
+scenario sidecars of synthaea-lab/scenarios (ADR-0009 replays bind to them by content
+hash) and the agent's Rust parity fixtures. Clone the repositories side by side, so
+siblings sit next to this one::
 
-    <umbrella>/{agent,server,ml,rules,lab}
+    <root>/{agent,server,ml,rules,scenarios}
 
-``SYNTHAEA_ROOT`` overrides the umbrella location.
+``SYNTHAEA_ROOT`` points at that parent directory (default: this repo's parent).
 """
 
 from __future__ import annotations
@@ -19,11 +21,11 @@ REQUIRE_ENV = "SYNTHAEA_REQUIRE_SIBLINGS"
 
 
 def root() -> Path:
-    """The umbrella directory holding the sibling checkouts."""
+    """The parent directory holding the sibling checkouts."""
     override = os.environ.get(ROOT_ENV)
     if override:
         return Path(override).resolve()
-    # synthaea_ml/siblings.py -> synthaea_ml -> <ml repo> -> <umbrella>
+    # synthaea_ml/siblings.py -> synthaea_ml -> <ml repo> -> <root>
     return Path(__file__).resolve().parents[2]
 
 
