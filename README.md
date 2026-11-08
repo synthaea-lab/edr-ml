@@ -63,7 +63,8 @@ they predate the evaluation gates and do not meet ship criteria.
 
 ## Tests and sibling checkouts
 
-`ruff check .` and `pytest tests` run from this directory. Some tests read files owned by
+`ruff check .`, `mypy` and `pytest tests` run from this directory (`pip install -e ".[dev]"`
+first: it pins the linters CI uses). Some tests read files owned by
 public sibling repositories: the agent's Rust parity fixtures (`crates/ml/tests/fixtures`
 in synthaea-lab/agent) and the scenario sidecars and capture scripts of
 synthaea-lab/scenarios (`scenarios/`, `ml-capture/`; model records bind to the yaml
