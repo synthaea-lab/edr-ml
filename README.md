@@ -18,8 +18,7 @@ generalization, and that only holds if this pipeline is reproducible and measure
 T0–T2 export to ONNX and ship to agents as signed data via canary rings, never embedded
 in the binary (ADR-0002); T3 lives with the control plane and never ships to endpoints.
 T3 also closes the loop: it curates per-site benign corpora from fleet telemetry, from
-which T0–T2 are recalibrated per deployment — see "Per-site adaptation" in
-`docs/detection/ml.md` for the loop and its safety constraints.
+which T0–T2 are recalibrated per deployment, under safety constraints of their own.
 
 ## Layout
 
@@ -51,7 +50,7 @@ which T0–T2 are recalibrated per deployment — see "Per-site adaptation" in
 2. **No model ships without an evaluation record.** Each registry entry carries a model
    card: training data provenance, metrics, FP rate against benign baselines, and the
    scenario-replay results — plus a **robustness card**: measured score degradation
-   under attacker-style mutations of known-bad samples (`docs/detection/ml.md`). FP
+   under attacker-style mutations of known-bad samples. FP
    governance and robustness regression are both release gates.
 3. **Reproducibility.** A registry model can be rebuilt from its recorded dataset
    versions and config. Notebooks are for exploration only.
@@ -61,3 +60,14 @@ capture/aggregation, `verify_onnx` (now a registry-wide oracle:
 `python -m synthaea_ml.export.verify_onnx`), and the Rust/Python parity fixtures under
 `tests/fixtures/`. The two old models live in `registry/` with reference-only cards —
 they predate the evaluation gates and do not meet ship criteria.
+
+## Tests and sibling checkouts
+
+`ruff check .` and `pytest tests` run from this directory. Some tests read files owned by
+public sibling repositories: the agent's Rust parity fixtures (`crates/ml/tests/fixtures`
+in synthaea-lab/agent) and the scenario sidecars and capture scripts of
+synthaea-lab/scenarios (`scenarios/`, `ml-capture/`; model records bind to the yaml
+sidecars by content hash, ADR-0009). Check them out next to this repo as `agent/` and
+`scenarios/` (alongside `server/` and `rules/` if you have them), or point `SYNTHAEA_ROOT`
+at their parent. A test whose sibling is absent is skipped; `SYNTHAEA_REQUIRE_SIBLINGS=1`
+(set by CI) makes it fail instead.

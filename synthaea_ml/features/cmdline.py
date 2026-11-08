@@ -6,7 +6,7 @@ Docker/containerd noise (very long but benign command lines, many arguments) fro
 (an isolated encoded payload, a shell pipe syntax) — see the limitation documented in
 docs/PLAN.md (week 8/aarch64) about the generalization of the 3 original features.
 
-**Must stay in sync with the Rust mirror** (agent/edr-ml/src/features.rs): exact same
+**Must stay in sync with the Rust mirror** (agent/crates/ml/src/features.rs): exact same
 definitions, same output order. A model trained here and loaded on the Rust side will only
 produce consistent scores if both implementations produce identical feature vectors for the
 same command line.

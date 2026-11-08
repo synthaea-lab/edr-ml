@@ -182,7 +182,7 @@ class ObservedDetection:
 class ScenarioReplayResult:
     """One replay run against one scenario, in one environment.
 
-    Binds to the source ``lab/scenarios/<scenario_name>.yaml`` by content
+    Binds to the source ``scenarios/<scenario_name>.yaml`` by content
     hash — mutating the yaml invalidates every record that references it, in
     the same way ``DatasetVersion.baseline_sha256`` binds datasets.
 
@@ -330,7 +330,7 @@ class MutationTestResult:
 class RobustnessCard:
     """Adversarial evaluation results for one scenario against one model.
 
-    Binds to the source ``lab/scenarios/<scenario_name>.yaml`` by content
+    Binds to the source ``scenarios/<scenario_name>.yaml`` by content
     hash, parallel to ``ScenarioReplayResult``. Captures aggregate metrics
     (escape rate, degradation percentiles) alongside per-mutation details.
 
@@ -662,7 +662,7 @@ def verify_training_record(
             ``ml/datasets/baselines/``. Each ``DatasetVersion.name`` is looked
             up as ``baselines_root/<name>/``.
         scenarios_root: The directory holding scenario yaml sidecars, e.g.
-            ``lab/scenarios/``. Each ``ScenarioReplayResult.scenario_name`` is
+            ``<root>/scenarios/scenarios/``. Each ``ScenarioReplayResult.scenario_name`` is
             looked up as ``scenarios_root/<name>.yaml``.
 
     Raises:

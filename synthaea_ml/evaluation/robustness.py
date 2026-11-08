@@ -113,7 +113,7 @@ def run_robustness_evaluation(
 
     Args:
         model: Trained model (sklearn IsolationForest with decision_function).
-        scenario_yaml: Path to scenario yaml (e.g., lab/scenarios/beacon.yaml).
+        scenario_yaml: Path to scenario yaml (e.g., ../scenarios/scenarios/beacon.yaml).
         tier: Mutation tier ("T0", "T1", "T2"). Default "T0".
         mutation_seed: Seed for deterministic PRNG. Default 42.
         threshold: Model threshold for detection. If None, uses model's default.

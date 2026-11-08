@@ -47,9 +47,9 @@ LAPLACE_ALPHA = 0.5
 
 
 def _normalize_event(e: dict) -> dict:
-    """Flatten the edr-new nested event format to the flat format expected downstream.
+    """Flatten the agent's nested event format to the flat format expected downstream.
 
-    edr-new format:
+    Agent format:
         {"type": "exec",      "meta": {"pid": ..., "timestamp_ns": ...}, "cmdline": ...}
         {"type": "connect",   "meta": {...}, "daddr_v4": [...], "dport": ..., "is_ipv6": ...}
         {"type": "connect",   "meta": {...}, "daddr": "1.2.3.4", "dport": ...}  (NAT captures)

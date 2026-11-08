@@ -8,7 +8,7 @@ directory as the baseline, capturing:
 - Provenance:  a stable **hash** of the hostname (not the hostname itself), the
   platform / OS version, and a free-form `capturer_ref` for human tracing.
 - Workload:    a human-picked label (e.g. `desktop-user`, `dev`, `admin`,
-  `server-idle`) so the per-site adaptation loop (see `docs/detection/ml.md`)
+  `server-idle`) so the per-site adaptation loop
   can bin captures by role rather than by identity.
 - Time range:  `capture_start` and `capture_end` in UTC ISO-8601.
 - Content:     `sample_count` and `sample_sha256` — the hash locks the dataset
@@ -32,8 +32,7 @@ The manifest is fully decoupled from the sample format — `train_linux.py` and
 manifest is what the (upcoming) registry glue does.
 
 CLI: `python -m synthaea_ml.data.manifest {write,verify} ...` — the wrapper
-around `write_manifest` and `verify_manifest` used by the day-to-day flow
-in `docs/ml/data-infra.md` ("Add a new baseline").
+around `write_manifest` and `verify_manifest`, used when adding a new baseline.
 """
 
 from __future__ import annotations

@@ -20,8 +20,6 @@ mutations produce argv values that cannot occur in practice:
 PathSubstitutionMutator and ArgumentReorderMutator (light/medium) are valid
 argv-level evasions. The others belong to a future shell-payload mutator
 that targets `sh -c` strings, not argv.
-
-See https://github.com/synthaea-lab/edr-new/pull/405#issuecomment-5808683319
 """
 
 import base64

@@ -13,3 +13,6 @@ __pycache__/
 datasets/captures/
 datasets/labeled/
 /baselines/
+
+# setuptools build output
+build/

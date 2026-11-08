@@ -27,7 +27,7 @@ from synthaea_ml.training import train_behavior
 _START = datetime(2026, 10, 2, 10, 0, 0, tzinfo=UTC)
 _END = datetime(2026, 10, 2, 11, 0, 0, tzinfo=UTC)
 S = 1_000_000_000
-SCENARIO = sibling("lab", "scenarios", "beacon.yaml")
+SCENARIO = sibling("scenarios", "scenarios", "beacon.yaml")
 
 
 def _meta(pid: int, ts: int, generation: int | None = None) -> dict:
@@ -261,7 +261,7 @@ def test_the_release_gate_re_verifies_an_events_jsonl_dataset(
     verify_training_record(out, baselines_root=baselines, scenarios_root=tmp_path)
 
 
-@needs("lab", "scenarios", "beacon.yaml")
+@needs("scenarios", "scenarios", "beacon.yaml")
 def test_train_behavior_runs_the_t1_robustness_tier_and_records_the_card(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

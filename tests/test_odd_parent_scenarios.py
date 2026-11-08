@@ -18,8 +18,8 @@ from siblings import needs, sibling
 
 from synthaea_ml.features.lineage import SUSPICIOUS_PATHS
 
-SCENARIOS = sorted(sibling("lab", "ml-capture", "odd-parents").glob("*.sh"))
-pytestmark = needs("lab", "ml-capture", "odd-parents")
+SCENARIOS = sorted(sibling("scenarios", "ml-capture", "odd-parents").glob("*.sh"))
+pytestmark = needs("scenarios", "ml-capture", "odd-parents")
 UNIX_SUSPICIOUS = [p for p in SUSPICIOUS_PATHS if p.startswith("/")]
 
 
