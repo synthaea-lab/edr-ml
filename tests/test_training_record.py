@@ -27,9 +27,11 @@ from synthaea_ml.data.manifest import write_manifest
 from synthaea_ml.registry.training_record import (
     MODEL_RECORD_FILENAME,
     SCHEMA_VERSION,
+    ConformalCalibration,
     DatasetVersion,
     Environment,
     ExpectedDetection,
+    FeatureBounds,
     ObservedDetection,
     ScenarioReplayResult,
     compute_passed,
@@ -596,3 +598,117 @@ def test_verify_training_record_detects_mutated_scenario_yaml_end_to_end(tmp_pat
     (scenarios_root / "beacon.yaml").write_text("v2 mutated\n", encoding="utf-8")
     with pytest.raises(ValueError, match="yaml hash mismatch"):
         verify_training_record(model_dir, baselines_root, scenarios_root)
+
+
+# --- golden bytes: schema v3 calibration fields -----------------------------
+
+_GOLDEN_RECORD = """{
+  "conformal_calibration": {
+    "benign_baseline_rate": 1000.0,
+    "calibrated_at": "2026-09-11T11:59:00+00:00",
+    "calibration_set_size": 300,
+    "fp_budget_per_endpoint_day": 5.0,
+    "threshold": -0.0421
+  },
+  "dataset_versions": [
+    {
+      "baseline_sha256": "%s",
+      "name": "linux__dev__abc__2026-09-11",
+      "sample_count": 2
+    }
+  ],
+  "extra": {
+    "commit_sha": "deadbeef"
+  },
+  "feature_bounds": {
+    "feature_names": [
+      "argv_len",
+      "entropy"
+    ],
+    "max_values": [
+      12.6,
+      5.25
+    ],
+    "min_values": [
+      0.0,
+      -0.1
+    ]
+  },
+  "hyperparameters": {
+    "contamination": 0.05,
+    "n_estimators": 100
+  },
+  "robustness_cards": [],
+  "scenario_replays": [],
+  "schema_version": 3,
+  "trained_at": "2026-09-11T12:00:00Z",
+  "training_script": "synthaea_ml/training/train_linux.py"
+}
+""" % ("ab" * 32)
+
+
+def test_model_record_with_calibration_is_byte_identical_to_golden(tmp_path: Path) -> None:
+    """Pins the exact on-disk bytes of ``model_record.json`` when the schema
+    v3 calibration fields are present, so a refactor of the calibration types
+    cannot silently change what the release gate hashes.
+
+    The writer opens the file in text mode, so on Windows each newline is
+    written as CRLF. Normalising CRLF to LF before comparing keeps the check
+    platform-independent while still failing on any change to content or key
+    order."""
+    write_training_record(
+        tmp_path,
+        training_script="synthaea_ml/training/train_linux.py",
+        dataset_versions=[
+            DatasetVersion(
+                name="linux__dev__abc__2026-09-11", baseline_sha256="ab" * 32, sample_count=2
+            )
+        ],
+        hyperparameters={"n_estimators": 100, "contamination": 0.05},
+        trained_at=_TRAINED_AT,
+        extra={"commit_sha": "deadbeef"},
+        conformal_calibration=ConformalCalibration(
+            fp_budget_per_endpoint_day=5.0,
+            threshold=-0.0421,
+            calibration_set_size=300,
+            benign_baseline_rate=1000.0,
+            calibrated_at="2026-09-11T11:59:00+00:00",
+        ),
+        feature_bounds=FeatureBounds(
+            feature_names=["argv_len", "entropy"],
+            min_values=[0.0, -0.1],
+            max_values=[12.6, 5.25],
+        ),
+    )
+
+    written = (tmp_path / MODEL_RECORD_FILENAME).read_bytes().replace(b"\r\n", b"\n")
+    assert written == _GOLDEN_RECORD.encode("utf-8")
+
+
+def test_calibration_types_round_trip_through_model_record(tmp_path: Path) -> None:
+    """The objects ``calibrate_threshold`` and ``compute_feature_bounds``
+    return are the same types the record loads back, so a written record
+    compares equal to the loaded one."""
+    import numpy as np
+    from sklearn.ensemble import IsolationForest
+
+    from synthaea_ml.calibration import calibrate_threshold, compute_feature_bounds
+
+    x = np.random.default_rng(0).normal(size=(40, 2))
+    model = IsolationForest(n_estimators=10, random_state=0).fit(x)
+    cal = calibrate_threshold(model, x, fp_budget=5.0, benign_rate_per_day=1000.0)
+    bounds = compute_feature_bounds(x, ["a", "b"])
+
+    written = write_training_record(
+        tmp_path,
+        training_script="t.py",
+        dataset_versions=[DatasetVersion(name="x", baseline_sha256="0" * 64, sample_count=1)],
+        trained_at=_TRAINED_AT,
+        conformal_calibration=cal,
+        feature_bounds=bounds,
+    )
+    loaded = load_training_record(tmp_path)
+
+    assert loaded == written
+    assert type(loaded.conformal_calibration) is type(cal)
+    assert type(loaded.feature_bounds) is type(bounds)
