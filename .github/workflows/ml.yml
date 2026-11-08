@@ -1,0 +1,61 @@
+name: ML
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only token for every job: nothing here writes to the repo, and a
+# compromised step or dependency then can't push, tag or touch PRs.
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    env:
+      # Parity tests read the agent's Rust fixtures and the lab scenarios: lay out the
+      # umbrella (ml/ + agent/ + lab/) and fail, not skip, if a sibling is missing.
+      SYNTHAEA_ROOT: ${{ github.workspace }}
+      SYNTHAEA_REQUIRE_SIBLINGS: "1"
+    defaults:
+      run:
+        working-directory: ml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ml
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: synthaea-lab/edr-agent
+          path: agent
+          persist-credentials: false
+          sparse-checkout: crates/ml/tests/fixtures
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: synthaea-lab/edr-lab
+          path: lab
+          persist-credentials: false
+          sparse-checkout: |
+            scenarios
+            ml-capture
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install tooling
+        # ruff pinned: unpinned, an unrelated ruff release can start flagging
+        # something that was always fine (RUF100 on the two now-removed
+        # DTZ001 noqa comments, found live when 0.17.0 landed mid-review and
+        # failed every PR touching ml/, main included — not a ml/ content bug).
+        run: pip install "ruff==0.17.0" pytest
+      - name: ruff
+        run: ruff check .
+      - name: pytest
+        # The dev extra carries numpy/onnx so the Rust/Python attribution parity
+        # tests really run here (they importorskip otherwise, silently weakening
+        # the seam).
+        run: |
+          pip install -e ".[dev]"
+          pytest tests

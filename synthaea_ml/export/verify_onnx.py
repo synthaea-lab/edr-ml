@@ -48,6 +48,7 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 
+from synthaea_ml import siblings
 from synthaea_ml.features.cmdline import extract_features
 from synthaea_ml.registry.training_record import (
     MODEL_RECORD_FILENAME,
@@ -59,10 +60,10 @@ from synthaea_ml.training.train_windows import SANITY_CHECK_SAMPLES as _WINDOWS_
 
 REGISTRY = Path(__file__).resolve().parents[2] / "registry"
 BASELINES = Path(__file__).resolve().parents[2] / "datasets" / "baselines"
-# Scenarios live at repo-root `lab/scenarios/` — two levels above `ml/` (which is
-# `parents[2]`). Introduced by ADR-0009: replays bind to their source yaml by
-# content hash, and this constant is where verify_training_record looks them up.
-SCENARIOS = Path(__file__).resolve().parents[3] / "lab" / "scenarios"
+# Scenarios live in the sibling `lab` repo (`<umbrella>/lab/scenarios/`). Introduced by
+# ADR-0009: replays bind to their source yaml by content hash, and this constant is
+# where verify_training_record looks them up.
+SCENARIOS = siblings.path("lab", "scenarios")
 
 _STRICT_PROVENANCE_ENV = "SYNTHAEA_STRICT_PROVENANCE"
 

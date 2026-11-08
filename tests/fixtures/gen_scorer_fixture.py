@@ -30,9 +30,10 @@ from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from synthaea_ml import siblings
 from synthaea_ml.features.cmdline import extract_features
 
-OUT_DIR = Path(__file__).resolve().parents[3] / "crates" / "ml" / "tests" / "fixtures"
+OUT_DIR = siblings.path("agent", "crates", "ml", "tests", "fixtures")
 
 # Benign-ish command lines (argv \0-separated, as ExecEvent::cmdline carries them) —
 # the training distribution. Kept deliberately mundane: system daemons, package

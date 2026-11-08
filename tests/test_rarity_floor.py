@@ -15,12 +15,14 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from siblings import needs, sibling
 from sklearn.ensemble import IsolationForest
 
 from synthaea_ml.calibration import calibrate_threshold
 from synthaea_ml.training import train_site_rarity as rare
 
-BEACON = Path(__file__).resolve().parents[2] / "lab" / "scenarios" / "beacon.yaml"
+BEACON = sibling("lab", "scenarios", "beacon.yaml")
+pytestmark = needs("lab", "scenarios", "beacon.yaml")
 
 
 def _cmdline_rows(n: int, seed: int) -> np.ndarray:

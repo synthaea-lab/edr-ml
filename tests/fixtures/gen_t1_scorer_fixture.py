@@ -31,8 +31,10 @@ import onnxruntime
 from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
+from synthaea_ml import siblings
+
 HERE = Path(__file__).resolve().parent
-OUT_DIR = HERE.parents[2] / "crates" / "ml" / "tests" / "fixtures"
+OUT_DIR = siblings.path("agent", "crates", "ml", "tests", "fixtures")
 
 golden = [json.loads(line) for line in (HERE / "t1_golden.jsonl").read_text().splitlines() if line]
 rows = {(r["pid"], r["process_generation"]): np.array(r["features"], dtype=np.float32) for r in golden}
