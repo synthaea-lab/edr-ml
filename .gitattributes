@@ -1,0 +1,15 @@
+# Split from the synthaea-lab/edr monorepo's root .gitattributes; see its history for the incidents.
+*.sh   text eol=lf
+*.ps1  text eol=crlf
+
+# datasets baselines are hash-pinned (manifest.json's sample_sha256) against their on-disk
+# bytes: core.autocrlf=true on Windows would otherwise rewrite LF to CRLF and every
+# verify_manifest run would fail with a hash mismatch unrelated to content (#196).
+datasets/**/*.jsonl text eol=lf
+datasets/**/manifest.json text eol=lf
+
+# Rust/Python parity fixtures: pinned for diff hygiene (a CRLF round-trip rewrites every line).
+tests/fixtures/**/*.jsonl text eol=lf
+tests/fixtures/**/*.json text eol=lf
+
+*.onnx binary

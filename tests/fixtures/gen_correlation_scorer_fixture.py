@@ -35,9 +35,10 @@ from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from synthaea_ml import siblings
 from synthaea_ml.features.correlation import FEATURE_NAMES, extract_features
 
-OUT_DIR = Path(__file__).resolve().parents[3] / "crates" / "ml" / "tests" / "fixtures"
+OUT_DIR = siblings.path("agent", "crates", "ml", "tests", "fixtures")
 MIN_EVENT_COUNT = 3  # mirror of ml::scorer::correlation::MIN_EVENT_COUNT
 GATE_IDX = FEATURE_NAMES.index("event_count")
 

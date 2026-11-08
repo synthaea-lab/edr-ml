@@ -14,12 +14,12 @@ import re
 from pathlib import Path
 
 import pytest
+from siblings import needs, sibling
 
 from synthaea_ml.features.lineage import SUSPICIOUS_PATHS
 
-SCENARIOS = sorted(
-    (Path(__file__).resolve().parents[2] / "lab" / "ml-capture" / "odd-parents").glob("*.sh")
-)
+SCENARIOS = sorted(sibling("lab", "ml-capture", "odd-parents").glob("*.sh"))
+pytestmark = needs("lab", "ml-capture", "odd-parents")
 UNIX_SUSPICIOUS = [p for p in SUSPICIOUS_PATHS if p.startswith("/")]
 
 

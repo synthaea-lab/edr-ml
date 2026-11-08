@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ML artifacts (large binaries are versioned elsewhere); shipped registry models are the exception.
+*.onnx
+!registry/**/*.onnx
+
+# Datasets built from lab captures: data on disk, never committed (datasets/README.md)
+datasets/captures/
+datasets/labeled/
+/baselines/
