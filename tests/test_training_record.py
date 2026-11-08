@@ -650,7 +650,12 @@ _GOLDEN_RECORD = """{
 def test_model_record_with_calibration_is_byte_identical_to_golden(tmp_path: Path) -> None:
     """Pins the exact on-disk bytes of ``model_record.json`` when the schema
     v3 calibration fields are present, so a refactor of the calibration types
-    cannot silently change what the release gate hashes."""
+    cannot silently change what the release gate hashes.
+
+    The writer opens the file in text mode, so on Windows each newline is
+    written as CRLF. Normalising CRLF to LF before comparing keeps the check
+    platform-independent while still failing on any change to content or key
+    order."""
     write_training_record(
         tmp_path,
         training_script="synthaea_ml/training/train_linux.py",
@@ -676,7 +681,8 @@ def test_model_record_with_calibration_is_byte_identical_to_golden(tmp_path: Pat
         ),
     )
 
-    assert (tmp_path / MODEL_RECORD_FILENAME).read_bytes() == _GOLDEN_RECORD.encode("utf-8")
+    written = (tmp_path / MODEL_RECORD_FILENAME).read_bytes().replace(b"\r\n", b"\n")
+    assert written == _GOLDEN_RECORD.encode("utf-8")
 
 
 def test_calibration_types_round_trip_through_model_record(tmp_path: Path) -> None:
