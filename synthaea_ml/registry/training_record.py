@@ -98,29 +98,46 @@ class ConformalCalibration:
     """Conformal prediction calibration metadata (issue #46).
 
     Records the threshold computed from a calibration set to meet a stated FP
-    budget (e.g., ≤5 false positives per endpoint per day). See
-    ``synthaea_ml.calibration.calibrate_conformal`` for the computation.
+    budget (e.g., ≤5 false positives per endpoint per day). Produced by
+    ``synthaea_ml.calibration.calibrate_threshold``; this is the single
+    definition, re-exported from ``synthaea_ml.calibration``.
     """
 
     fp_budget_per_endpoint_day: float
+    """Maximum acceptable false positives per endpoint per day (e.g., 5.0)."""
+
     threshold: float
+    """decision_function threshold: anomaly if score < threshold."""
+
     calibration_set_size: int
+    """Number of samples in the calibration set (30% of training data)."""
+
     benign_baseline_rate: float
-    calibrated_at: str  # ISO 8601 UTC
+    """Estimated benign events per endpoint per day (for FP rate conversion)."""
+
+    calibrated_at: str
+    """ISO 8601 UTC timestamp when calibration was performed."""
 
 
 @dataclass(frozen=True)
 class FeatureBounds:
     """Per-feature [min, max] bounds for out-of-distribution detection (issue #46).
 
-    Computed from the training set with a margin to avoid false OOD rejections
-    on legitimate edge cases. The Rust scorer validates feature vectors against
-    these bounds before inference.
+    Computed from the training set (70%) with a margin to avoid false OOD
+    rejections on legitimate edge cases. The Rust scorer validates feature
+    vectors against these bounds before inference. Produced by
+    ``synthaea_ml.calibration.compute_feature_bounds``; this is the single
+    definition, re-exported from ``synthaea_ml.calibration``.
     """
 
     feature_names: list[str]
+    """Feature names in order (must match model input)."""
+
     min_values: list[float]
+    """Minimum allowed value per feature (inclusive)."""
+
     max_values: list[float]
+    """Maximum allowed value per feature (inclusive)."""
 
 
 # ── Scenario replay binding (ADR-0009, schema v2) ───────────────────────────
@@ -566,11 +583,11 @@ def load_training_record(model_dir: Path) -> TrainingRecord:
     # Schema v3 fields (backward compatible: None if absent)
     conformal_cal = None
     if "conformal_calibration" in payload:
-        conformal_cal = ConformalCalibration(**payload["conformal_calibration"])  # type: ignore[arg-type]
+        conformal_cal = ConformalCalibration(**payload["conformal_calibration"])
 
     feature_bounds = None
     if "feature_bounds" in payload:
-        feature_bounds = FeatureBounds(**payload["feature_bounds"])  # type: ignore[arg-type]
+        feature_bounds = FeatureBounds(**payload["feature_bounds"])
 
     return TrainingRecord(
         schema_version=schema_version,
