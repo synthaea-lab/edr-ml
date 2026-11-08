@@ -16,10 +16,10 @@ tag) → per-PID correlation window → 8-feature vector.
 Both must produce the golden vectors. All events sit inside one 60 s correlation window,
 so `EventBus` eviction (`global_max - window`) and the aggregator's per-PID window agree.
 
-Run from `ml/tests/fixtures/` with the venv (numpy for nothing here — stdlib only, plus
+Run from the ml repository root with the venv (numpy for nothing here — stdlib only, plus
 the package on the path):
 
-    python3 gen_capture_parity.py
+    python tests/fixtures/generators/gen_capture_correlation_golden.py
 
 Regenerate only on a deliberate change to the correlation feature definition or the
 wire format — never to paper over a red parity test.
@@ -29,10 +29,10 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from synthaea_ml.data.aggregate_correlation import charger_events, vecteurs_par_pid
 
-OUT = Path(__file__).resolve().parent
+OUT = Path(__file__).resolve().parents[1]  # tests/fixtures/
 S = 1_000_000_000
 BASE = 1_756_900_000 * S  # arbitrary epoch-ns start, matching the golden.rs style
 

@@ -9,9 +9,9 @@ models have (one TreeEnsembleRegressor per tree behind a Gather). Expected value
 from `ml/tests/attribution_reference.py`; `crates/ml/tests/attribution_golden.rs`
 asserts the Rust implementation reproduces them.
 
-Run from `ml/tests/fixtures/` with a venv holding numpy, scikit-learn, skl2onnx, onnx:
+Run from the ml repository root with a venv holding numpy, scikit-learn, skl2onnx, onnx:
 
-    python3 gen_attribution_fixture.py
+    python tests/fixtures/generators/gen_attribution_golden.py
 
 Regenerate only when the attribution *definition* changes (that is a seam change —
 both sides must move together), never to paper over a parity failure.
@@ -26,8 +26,8 @@ import onnxruntime
 from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from attribution_reference import attribute, load_forest
 
 from synthaea_ml import siblings

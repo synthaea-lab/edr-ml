@@ -10,7 +10,7 @@ produce the same vector for the same cmdline. Both test suites consume it:
 Python is the reference: it is what defines the model's input space at training time.
 After ANY change to features.py, regenerate the file (and retrain the models):
 
-    python tests/fixtures/gen_features_golden.py
+    python tests/fixtures/generators/gen_features_golden.py
 
 A change to the golden file in a diff without retraining the .onnx files should raise a flag
 in review: the embedded model would then be scoring vectors it never saw during training.
@@ -62,7 +62,7 @@ CASES = [
     'sh\0-c\0echo "quoted \\ value"\n\0',
 ]
 
-OUT = Path(__file__).resolve().parent / "features_golden.jsonl"
+OUT = Path(__file__).resolve().parents[1] / "features_golden.jsonl"
 
 
 def main() -> None:

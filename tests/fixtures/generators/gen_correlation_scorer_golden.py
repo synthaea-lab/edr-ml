@@ -4,7 +4,7 @@
     crates/ml/tests/fixtures/correlation_scorer_golden.jsonl  (events -> onnxruntime score)
 
 The `verify_onnx` seam for the T2 *inference path*, the counterpart of
-`gen_scorer_fixture.py` for T0. It pins the Rust `ort` score (via `ml::CorrelationScorer`,
+`gen_scorer_golden.py` for T0. It pins the Rust `ort` score (via `ml::CorrelationScorer`,
 which extracts the vector from an `EventBus`) to the Python onnxruntime score computed
 from the same events through `synthaea_ml.features.correlation` — the definitions the
 Rust side mirrors.
@@ -15,10 +15,10 @@ Cases are *event lists*, not raw vectors: that exercises the whole chain
 `score` is `null` for windows below the Rust-side `MIN_EVENT_COUNT` gate (the model is
 never asked, the scorer returns `None`).
 
-Run from `ml/tests/fixtures/` with a venv holding numpy, scikit-learn, skl2onnx, onnx,
+Run from the ml repository root with a venv holding numpy, scikit-learn, skl2onnx, onnx,
 onnxruntime:
 
-    python3 gen_correlation_scorer_fixture.py
+    python tests/fixtures/generators/gen_correlation_scorer_golden.py
 
 Regenerate only on a deliberate change to the correlation feature definition or the
 model recipe (a seam change — retrain the shipped model too), never to paper over a
@@ -34,7 +34,7 @@ import onnxruntime
 from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from synthaea_ml import siblings
 from synthaea_ml.features.correlation import FEATURE_NAMES, extract_features
 
@@ -83,7 +83,7 @@ train_x = np.array(_benign_window(400), dtype=np.float32)
 
 # contamination 0.02: behavioural counts of a normal process sit near zero and cluster
 # tightly — the benign blob separates better than on text features (0.05). Matches
-# train_correlation.py. Tree count / sample cap kept small (like gen_scorer_fixture.py):
+# train_correlation.py. Tree count / sample cap kept small (like gen_scorer_golden.py):
 # this fixture pins Rust==Python inference, not detection quality.
 model = IsolationForest(
     n_estimators=20, max_samples=64, contamination=0.02, random_state=42
