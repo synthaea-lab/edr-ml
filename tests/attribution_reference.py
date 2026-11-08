@@ -125,7 +125,7 @@ def _pick_sample_counts(tree: _Tree, depth: list[int], encoders) -> list[float] 
         raise ValueError("cannot identify the sample-count leaf encoder")
     keys, vals = candidates[0]
     counts = [float("nan")] * len(tree.feature)
-    for k, v in zip(keys, vals):
+    for k, v in zip(keys, vals, strict=True):
         if not tree.is_leaf[k]:
             raise ValueError("leaf encoder key is not a leaf")
         if v < 1.0 or v != int(v):

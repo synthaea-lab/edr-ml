@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import onnxruntime
 from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
@@ -78,8 +79,6 @@ for x in cases_x:
 # anomaly score does — decision_function is monotone-increasing in expected path
 # length (deep = normal), so the two orderings must be identical. If this fails, the
 # attribution semantics have drifted from what actually ships.
-import onnxruntime
-
 sess = onnxruntime.InferenceSession(model_path.read_bytes(), providers=["CPUExecutionProvider"])
 onnx_scores = sess.run(["scores"], {"X": cases_x})[0].reshape(-1)
 ours = np.array([c["depth"] for c in cases])
