@@ -20,22 +20,23 @@ in the binary (ADR-0002); T3 lives with the control plane and never ships to end
 T3 also closes the loop: it curates per-site benign corpora from fleet telemetry, from
 which T0–T2 are recalibrated per deployment, under safety constraints of their own.
 
-## Layout
+## Repository layout
 
 | Path | Purpose |
 | --- | --- |
-| `synthaea_ml/` | The Python package — see subpackage docstrings |
+| `synthaea_ml/` | The Python package — see subpackage docstrings; CLIs run as `python -m synthaea_ml.<pkg>.<module>` |
 | `synthaea_ml/features/` | Feature definitions — the Rust parity seam (fixtures shared with `crates/ml`) |
-| `synthaea_ml/data/` | Capture parsing, dataset building, labeling |
-| `synthaea_ml/models/` | Model definitions per tier |
-| `synthaea_ml/training/` | Training entry points per tier/platform |
+| `synthaea_ml/data/` | Capture parsing, dataset building, baseline manifests |
+| `synthaea_ml/training/` | Training entry points per tier/platform, shared training config |
 | `synthaea_ml/calibration/` | Bayesian LLR calibration, conformal FP-budget thresholds, OOD guards |
-| `synthaea_ml/evaluation/` | Metrics, FP governance, scenario-replay evaluation |
-| `synthaea_ml/export/` | ONNX export + parity verification (`verify_onnx`) |
-| `datasets/` | Data on disk (not committed) — documented layout below |
-| `registry/` | Versioned model artifacts + model cards — what ships |
-| `notebooks/` | Experiments; anything load-bearing graduates into the package |
-| `tests/` | Unit tests + Rust/Python parity fixtures |
+| `synthaea_ml/evaluation/` | Metrics, FP governance, scenario-replay and robustness evaluation |
+| `synthaea_ml/registry/` | Registry file layout and the machine-readable model record |
+| `synthaea_ml/export/` | ONNX parity verification (`verify_onnx`) |
+| `datasets/baselines/` | Committed benign baselines, one directory per capture, manifested per `synthaea_ml.data.manifest`; raw captures and labeled traces stay on disk ([datasets/README.md](datasets/README.md)) |
+| `registry/` | Versioned model artifacts + model cards — what ships ([registry/README.md](registry/README.md)) |
+| `reports/calibration/` | LLR calibration reports, the receipts behind calibrated constants ([reports/README.md](reports/README.md)) |
+| `tests/` | Unit tests |
+| `tests/fixtures/` | Rust/Python parity golden data; `generators/` holds the scripts that write it ([tests/fixtures/README.md](tests/fixtures/README.md)) |
 
 ## The three rules
 
