@@ -25,7 +25,7 @@ Usage:
         --site-corpus /path/to/corpus-v1.jsonl \\
         --output-dir ml/registry/cmdline-iforest-linux-site-acme/0.1.0/ \\
         --site-name acme-corp \\
-        --robustness-scenarios lab/scenarios/beacon.yaml
+        --robustness-scenarios scenarios/scenarios/beacon.yaml
 """
 
 from __future__ import annotations

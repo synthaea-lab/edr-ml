@@ -20,7 +20,7 @@ def needs(repo: str, *parts: str) -> pytest.MarkDecorator:
     missing = not target.exists()
     reason = (
         f"needs sibling repo `{repo}` ({target}); "
-        f"check it out via the umbrella or set {siblings.ROOT_ENV}"
+        f"check out synthaea-lab/{repo} next to this repo as {repo}/ or set {siblings.ROOT_ENV}"
     )
     if missing and siblings.required():
         raise RuntimeError(f"{siblings.REQUIRE_ENV}=1 but this test {reason}")

@@ -23,8 +23,8 @@ from synthaea_ml.calibration import calibrate_threshold
 from synthaea_ml.evaluation.onnx_model import load_shipped_model
 from synthaea_ml.training import train_site_rarity as rare
 
-BEACON = sibling("lab", "scenarios", "beacon.yaml")
-pytestmark = needs("lab", "scenarios", "beacon.yaml")
+BEACON = sibling("scenarios", "scenarios", "beacon.yaml")
+pytestmark = needs("scenarios", "scenarios", "beacon.yaml")
 ONNX_OPSET = {"": 18, "ai.onnx.ml": 3}
 
 

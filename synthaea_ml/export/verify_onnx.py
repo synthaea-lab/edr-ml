@@ -21,8 +21,8 @@ the scenario replays that validated it (see
 `synthaea_ml.registry.training_record`, ADR-0009, rule 3 of `ml/README.md`).
 When present, `verify_training_record` is called: every referenced baseline must
 still exist under `ml/datasets/baselines/` and still hash to the value the record
-locked, and every referenced scenario yaml must still exist under `lab/scenarios/`
-and still hash to the value the record locked.
+locked, and every referenced scenario yaml must still exist under `scenarios/` in the
+synthaea-lab/scenarios sibling checkout and still hash to the value the record locked.
 
 Pre-#44 legacy entries (`cmdline-iforest-{linux,windows}/0.1.0/`) predate the
 record concept and have no `model_record.json`. In interactive/dev mode they pass
@@ -60,10 +60,10 @@ from synthaea_ml.training.train_windows import SANITY_CHECK_SAMPLES as _WINDOWS_
 
 REGISTRY = Path(__file__).resolve().parents[2] / "registry"
 BASELINES = Path(__file__).resolve().parents[2] / "datasets" / "baselines"
-# Scenarios live in the sibling `lab` repo (`<umbrella>/lab/scenarios/`). Introduced by
-# ADR-0009: replays bind to their source yaml by content hash, and this constant is
-# where verify_training_record looks them up.
-SCENARIOS = siblings.path("lab", "scenarios")
+# Scenarios live in the sibling `scenarios` repo (synthaea-lab/scenarios, checked out as
+# `<root>/scenarios/`). Introduced by ADR-0009: replays bind to their source yaml by
+# content hash, and this constant is where verify_training_record looks them up.
+SCENARIOS = siblings.path("scenarios", "scenarios")
 
 _STRICT_PROVENANCE_ENV = "SYNTHAEA_STRICT_PROVENANCE"
 

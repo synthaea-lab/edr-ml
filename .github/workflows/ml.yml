@@ -20,8 +20,9 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
-      # Parity tests read the agent's Rust fixtures and the lab scenarios: lay out the
-      # umbrella (ml/ + agent/ + lab/) and fail, not skip, if a sibling is missing.
+      # Parity tests read the agent's Rust fixtures and the scenario sidecars: check the
+      # public repos out side by side (ml/ + agent/ + scenarios/) and fail, not skip, if a
+      # sibling is missing.
       SYNTHAEA_ROOT: ${{ github.workspace }}
       SYNTHAEA_REQUIRE_SIBLINGS: "1"
     defaults:
@@ -35,14 +36,14 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: synthaea-lab/edr-agent
+          repository: synthaea-lab/agent
           path: agent
           persist-credentials: false
           sparse-checkout: crates/ml/tests/fixtures
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: synthaea-lab/edr-lab
-          path: lab
+          repository: synthaea-lab/scenarios
+          path: scenarios
           persist-credentials: false
           sparse-checkout: |
             scenarios

@@ -1,7 +1,7 @@
 """Regenerates the common-set snapshot wire-format golden file (common_set_snapshot_golden.json).
 
 ADR-0020 ships the fleet's common set to the agent as a signed content entry. This file is the
-wire format's reference, written from the spec in `docs/detection/common-set-snapshot-format.md`
+wire format's reference, written from the format spec
 with the standard library only, so it is a third implementation next to the two that must agree
 with it:
 

@@ -21,8 +21,8 @@ from sklearn.ensemble import IsolationForest
 from synthaea_ml.calibration import calibrate_threshold
 from synthaea_ml.training import train_site_rarity as rare
 
-BEACON = sibling("lab", "scenarios", "beacon.yaml")
-pytestmark = needs("lab", "scenarios", "beacon.yaml")
+BEACON = sibling("scenarios", "scenarios", "beacon.yaml")
+pytestmark = needs("scenarios", "scenarios", "beacon.yaml")
 
 
 def _cmdline_rows(n: int, seed: int) -> np.ndarray:
