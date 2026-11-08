@@ -20,22 +20,23 @@ in the binary (ADR-0002); T3 lives with the control plane and never ships to end
 T3 also closes the loop: it curates per-site benign corpora from fleet telemetry, from
 which T0–T2 are recalibrated per deployment, under safety constraints of their own.
 
-## Layout
+## Repository layout
 
 | Path | Purpose |
 | --- | --- |
-| `synthaea_ml/` | The Python package — see subpackage docstrings |
+| `synthaea_ml/` | The Python package — see subpackage docstrings; CLIs run as `python -m synthaea_ml.<pkg>.<module>` |
 | `synthaea_ml/features/` | Feature definitions — the Rust parity seam (fixtures shared with `crates/ml`) |
-| `synthaea_ml/data/` | Capture parsing, dataset building, labeling |
-| `synthaea_ml/models/` | Model definitions per tier |
-| `synthaea_ml/training/` | Training entry points per tier/platform |
+| `synthaea_ml/data/` | Capture parsing, dataset building, baseline manifests |
+| `synthaea_ml/training/` | Training entry points per tier/platform, shared training config |
 | `synthaea_ml/calibration/` | Bayesian LLR calibration, conformal FP-budget thresholds, OOD guards |
-| `synthaea_ml/evaluation/` | Metrics, FP governance, scenario-replay evaluation |
-| `synthaea_ml/export/` | ONNX export + parity verification (`verify_onnx`) |
-| `datasets/` | Data on disk (not committed) — documented layout below |
-| `registry/` | Versioned model artifacts + model cards — what ships |
-| `notebooks/` | Experiments; anything load-bearing graduates into the package |
-| `tests/` | Unit tests + Rust/Python parity fixtures |
+| `synthaea_ml/evaluation/` | Metrics, FP governance, scenario-replay and robustness evaluation |
+| `synthaea_ml/registry/` | Registry file layout and the machine-readable model record |
+| `synthaea_ml/export/` | ONNX parity verification (`verify_onnx`) |
+| `datasets/baselines/` | Committed benign baselines, one directory per capture, manifested per `synthaea_ml.data.manifest`; raw captures and labeled traces stay on disk ([datasets/README.md](datasets/README.md)) |
+| `registry/` | Versioned model artifacts + model cards — what ships ([registry/README.md](registry/README.md)) |
+| `reports/calibration/` | LLR calibration reports, the receipts behind calibrated constants ([reports/README.md](reports/README.md)) |
+| `tests/` | Unit tests |
+| `tests/fixtures/` | Rust/Python parity golden data; `generators/` holds the scripts that write it ([tests/fixtures/README.md](tests/fixtures/README.md)) |
 
 ## The three rules
 
@@ -53,7 +54,7 @@ which T0–T2 are recalibrated per deployment, under safety constraints of their
    under attacker-style mutations of known-bad samples. FP
    governance and robustness regression are both release gates.
 3. **Reproducibility.** A registry model can be rebuilt from its recorded dataset
-   versions and config. Notebooks are for exploration only.
+   versions and config. Exploratory work is never load-bearing (see Contributing).
 
 Migrated from `old/ml` (issue #14): features, training entry points, LLR calibration,
 capture/aggregation, `verify_onnx` (now a registry-wide oracle:
@@ -72,3 +73,9 @@ sidecars by content hash, ADR-0009). Check them out next to this repo as `agent/
 `scenarios/` (alongside `server/` and `rules/` if you have them), or point `SYNTHAEA_ROOT`
 at their parent. A test whose sibling is absent is skipped; `SYNTHAEA_REQUIRE_SIBLINGS=1`
 (set by CI) makes it fail instead.
+
+## Contributing
+
+Exploratory work (notebooks, one-off scripts) stays out of this repository until it
+matters: anything load-bearing graduates into `synthaea_ml/` with tests. Nothing
+exploratory is imported by the package or run by CI.

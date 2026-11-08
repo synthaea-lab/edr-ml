@@ -19,7 +19,8 @@ Choices to settle on real data (provisional values in `config.CORRELATION_FOREST
   - agent gate: do not score a vector with `event_count < 3` (nearly empty window) — applied
     on the Rust side, not at training time.
 
-Usage: `python3 train_correlation.py`  (venv `ml/.venv`: scikit-learn / skl2onnx / onnx).
+Usage: `python -m synthaea_ml.training.train_correlation`  (venv `ml/.venv`: scikit-learn /
+skl2onnx / onnx).
 """
 
 import json
@@ -56,7 +57,7 @@ def load_dataset() -> np.ndarray:
     if not DATA_PATH.exists():
         raise FileNotFoundError(
             f"{DATA_PATH} not found — run a capture (`edr-cli capture-events`) "
-            "then `python aggregate_correlation.py`."
+            "then `python -m synthaea_ml.data.aggregate_correlation`."
         )
     vecs = []
     for line in DATA_PATH.read_text(encoding="utf-8").splitlines():

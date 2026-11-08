@@ -3,7 +3,7 @@
 
 The Rust counterpart is `crates/ml/tests/t1_golden.rs`. If either breaks, the trainer and
 the on-device scorer disagree on the 17-feature vector. Regenerate with
-`fixtures/gen_t1_parity.py` only on a deliberate change.
+`fixtures/generators/gen_t1_golden.py` only on a deliberate change.
 """
 
 import json

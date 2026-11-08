@@ -18,8 +18,8 @@ This extraction is in 1-to-1 correspondence with the
 `CorrelationEngine::behavior_vector_for_pid` method of crates/synthaea-correlator/src/lib.rs.
 Any change to a feature must be mirrored in both files.
 
-Standalone usage:
-    python behavior_features.py
+Standalone usage (runs the self-tests):
+    python -m synthaea_ml.features.behavior
 """
 
 from __future__ import annotations

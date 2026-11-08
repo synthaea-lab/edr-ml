@@ -15,10 +15,10 @@ unsupervised, it trains on a benign baseline alone (cf. `train_correlation.py`).
 
 Output: JSON-Lines, one `{"pid", "features": [...], "feature_names": [...]}` object per line.
 
-Usage:
-    python aggregate_correlation.py [--events events.jsonl]
-                                    [--out data/correlation_train.jsonl]
-                                    [--window 60] [--min-events 1]
+Usage (from the repository root):
+    python -m synthaea_ml.data.aggregate_correlation \
+        [--events events.jsonl] [--out synthaea_ml/training/data/correlation_train.jsonl]
+        [--window 60] [--min-events 1]
 """
 
 from __future__ import annotations

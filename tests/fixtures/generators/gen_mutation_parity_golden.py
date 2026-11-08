@@ -1,6 +1,6 @@
 """Generate mutation_parity_golden.jsonl with real mutation + feature values.
 
-Run: python tests/fixtures/generate_mutation_parity_golden.py
+Run: python tests/fixtures/generators/gen_mutation_parity_golden.py
 """
 
 import json
@@ -92,7 +92,7 @@ def generate_golden() -> list[dict]:
 def main() -> None:
     golden = generate_golden()
 
-    output = Path(__file__).parent / "mutation_parity_golden.jsonl"
+    output = Path(__file__).resolve().parents[1] / "mutation_parity_golden.jsonl"
     with output.open("w", encoding="utf-8") as f:
         for case in golden:
             f.write(json.dumps(case) + "\n")

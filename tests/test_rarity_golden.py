@@ -57,7 +57,7 @@ def test_golden_is_what_the_generator_writes() -> None:
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
-        "gen_rarity_golden", GOLDEN.with_name("gen_rarity_golden.py")
+        "gen_rarity_golden", GOLDEN.parent / "generators" / "gen_rarity_golden.py"
     )
     assert spec is not None and spec.loader is not None
     gen = importlib.util.module_from_spec(spec)

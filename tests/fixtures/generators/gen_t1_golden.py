@@ -17,9 +17,9 @@ lineage, a Windows-style exec with no argv (flat cmdline), and an incarnation wi
 execs (the most recent one supplies cmdline and lineage). Every event sits inside one 60 s
 window, so `EventBus` eviction and the dataset builder's per-incarnation window agree.
 
-Run from `ml/tests/fixtures/` (stdlib plus the package on the path):
+Run from the ml repository root (stdlib plus the package on the path):
 
-    python3 gen_t1_parity.py
+    python tests/fixtures/generators/gen_t1_golden.py
 
 Regenerate only on a deliberate change to the T1 layout, a feature definition or the wire
 format: never to paper over a red parity test.
@@ -29,11 +29,11 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from synthaea_ml.data.behavior_dataset import load_records
 from synthaea_ml.features import t1
 
-OUT = Path(__file__).resolve().parent
+OUT = Path(__file__).resolve().parents[1]  # tests/fixtures/
 S = 1_000_000_000
 BASE = 1_756_900_000 * S
 

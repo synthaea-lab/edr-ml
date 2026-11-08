@@ -9,7 +9,7 @@ same hash, snapshot and minimum coverage. Both test suites consume it:
 
 Python is the reference. After ANY change to rarity.py, regenerate and retrain:
 
-    python tests/fixtures/gen_rarity_golden.py
+    python tests/fixtures/generators/gen_rarity_golden.py
 
 Each row is `{name, sha256, snapshot, min_hosts, features}` where `snapshot` is `null` or
 `{"common": [...], "hosts_covered": n}`.
@@ -60,7 +60,7 @@ CASES: list[tuple[str, str | None, dict | None, int]] = [
 
 
 def main() -> None:
-    out = Path(__file__).resolve().parent / "rarity_golden.jsonl"
+    out = Path(__file__).resolve().parents[1] / "rarity_golden.jsonl"
     with out.open("w", encoding="utf-8", newline="\n") as f:
         for name, sha256, snapshot, min_hosts in CASES:
             parsed = (

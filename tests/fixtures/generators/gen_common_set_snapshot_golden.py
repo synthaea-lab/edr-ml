@@ -10,9 +10,9 @@ with it:
   - crates/ml/tests/common_set_snapshot_golden.rs  (the Rust reader must parse them and answer
     membership identically)
 
-After ANY change to the format (a version bump, per CLAUDE.md), regenerate:
+After ANY change to the format (a version bump, per CLAUDE.md), regenerate from the ml repository root:
 
-    python3 ml/tests/fixtures/gen_common_set_snapshot_golden.py
+    python tests/fixtures/generators/gen_common_set_snapshot_golden.py
 
 Each case is `{name, params, bytes_hex, members, non_members}`. `non_members` only lists hashes
 this filter answers `false` for: a Bloom filter may answer `true` for any absent hash, so the
@@ -105,7 +105,7 @@ def main() -> None:
                 "non_members": absent,
             }
         )
-    out = Path(__file__).with_name("common_set_snapshot_golden.json")
+    out = Path(__file__).resolve().parents[1] / "common_set_snapshot_golden.json"
     out.write_text(json.dumps({"format_version": FORMAT_VERSION, "cases": cases}, indent=1) + "\n")
     print(f"wrote {out} ({len(cases)} cases)")
 

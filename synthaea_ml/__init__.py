@@ -1,1 +1,1 @@
-"""Synthaea ML package — features, data, models, training, calibration, evaluation, export."""
+"""Synthaea ML package — features, data, training, calibration, evaluation, registry, export."""

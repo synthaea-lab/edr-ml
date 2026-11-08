@@ -3,10 +3,10 @@
     crates/ml/tests/fixtures/t1_scorer.onnx           (a small 17-feature IsolationForest)
     crates/ml/tests/fixtures/t1_scorer_golden.jsonl   ({pid, process_generation, score})
 
-The inference-path counterpart of `gen_t1_parity.py`: that pins the 17-feature *vector*,
+The inference-path counterpart of `gen_t1_golden.py`: that pins the 17-feature *vector*,
 this pins the *score* `ml::BehaviorScorer` (Rust vector from an `EventBus`, then `ort`)
 computes against the one onnxruntime computes from the Python vector of the same
-incarnations. It reuses `t1_events.jsonl` / `t1_golden.jsonl`, so run `gen_t1_parity.py`
+incarnations. It reuses `t1_events.jsonl` / `t1_golden.jsonl`, so run `gen_t1_golden.py`
 first if those change.
 
 The model is trained on jittered copies of the benign incarnations of that capture. It
@@ -14,10 +14,10 @@ exists to pin Rust == Python inference, not detection quality; a model trained o
 capture is what #617 is waiting for. `score` is null for an incarnation with no exec in the
 window (the scorer returns `None` and the model is never asked).
 
-Run from `ml/tests/fixtures/` with a venv holding numpy, scikit-learn, skl2onnx, onnx,
+Run from the ml repository root with a venv holding numpy, scikit-learn, skl2onnx, onnx,
 onnxruntime:
 
-    python3 gen_t1_scorer_fixture.py
+    python tests/fixtures/generators/gen_t1_scorer_golden.py
 
 Regenerate only on a deliberate change to the T1 layout or the model recipe, never to
 paper over a red parity test.
@@ -33,10 +33,10 @@ from sklearn.ensemble import IsolationForest
 
 from synthaea_ml import siblings
 
-HERE = Path(__file__).resolve().parent
+FIXTURES = Path(__file__).resolve().parents[1]  # tests/fixtures/
 OUT_DIR = siblings.path("agent", "crates", "ml", "tests", "fixtures")
 
-golden = [json.loads(line) for line in (HERE / "t1_golden.jsonl").read_text().splitlines() if line]
+golden = [json.loads(line) for line in (FIXTURES / "t1_golden.jsonl").read_text().splitlines() if line]
 rows = {(r["pid"], r["process_generation"]): np.array(r["features"], dtype=np.float32) for r in golden}
 
 # Benign incarnations: no web-server or Office parent, nothing downloaded and dropped.

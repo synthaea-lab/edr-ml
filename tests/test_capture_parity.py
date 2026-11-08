@@ -3,7 +3,7 @@ reproduce `fixtures/capture_correlation_golden.jsonl` from `fixtures/capture_eve
 
 The Rust counterpart is `crates/ml/tests/capture_parity.rs`. If either breaks, the
 agent's `events.jsonl` and the trainer disagree on the correlation vector. Regenerate
-with `fixtures/gen_capture_parity.py` only on a deliberate format change.
+with `fixtures/generators/gen_capture_correlation_golden.py` only on a deliberate format change.
 """
 
 import json

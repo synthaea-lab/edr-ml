@@ -12,7 +12,7 @@ Duplicate command lines (same argv tuple) are dropped so the baseline stays
 compact and representative — a process that runs 10 000 times adds one sample.
 
 Usage:
-    python3 capture_to_baseline.py <events.jsonl> [--out baseline_benign.jsonl]
+    python -m synthaea_ml.data.capture_to_baseline <events.jsonl> [--out baseline_benign.jsonl]
 """
 
 import argparse

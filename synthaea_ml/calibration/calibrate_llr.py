@@ -5,9 +5,10 @@ Reads `events.jsonl` (raw events logged by the agent) and `alerts.ndjson`
 window, splits benign/malicious based on the alerted PIDs, and generates the
 empirical LLRs + the corresponding Rust code for `log_likelihood_ratio()`.
 
-Usage:
-    python calibrate_llr.py [--events events.jsonl] [--alerts alerts.ndjson]
-                            [--window 60] [--min-mal 1] [--out llr_report.txt]
+Usage (from the repository root; the report goes to stdout without --out):
+    python -m synthaea_ml.calibration.calibrate_llr \
+        [--events events.jsonl] [--alerts alerts.ndjson] [--window 60] [--min-mal 1]
+        [--out reports/calibration/llr_report_<run>.txt]
 """
 
 from __future__ import annotations

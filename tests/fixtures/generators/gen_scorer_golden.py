@@ -14,10 +14,10 @@ same definitions the Rust side mirrors) from a set of benign-ish command lines, 
 learned boundary is meaningful rather than random. Exported through the real skl2onnx
 converter at the opsets production models use.
 
-Run from `ml/tests/fixtures/` with a venv holding numpy, scikit-learn, skl2onnx, onnx,
+Run from the ml repository root with a venv holding numpy, scikit-learn, skl2onnx, onnx,
 onnxruntime:
 
-    python3 gen_scorer_fixture.py
+    python tests/fixtures/generators/gen_scorer_golden.py
 """
 
 import json
@@ -29,7 +29,7 @@ import onnxruntime
 from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from synthaea_ml import siblings
 from synthaea_ml.features.cmdline import extract_features
 
