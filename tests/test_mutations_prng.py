@@ -4,6 +4,8 @@ Validates that the LCG produces deterministic sequences matching the Rust
 implementation in crates/sensors/linux/audit/tests/robustness.rs.
 """
 
+import pytest
+
 from synthaea_ml.evaluation.mutations.prng import LCG
 
 
@@ -50,11 +52,8 @@ def test_lcg_choice() -> None:
 def test_lcg_choice_empty_raises() -> None:
     """choice on empty list raises ValueError."""
     rng = LCG(seed=42)
-    try:
+    with pytest.raises(ValueError, match="(?i)empty"):
         rng.choice([])
-        assert False, "should have raised ValueError"
-    except ValueError as e:
-        assert "empty" in str(e).lower()
 
 
 def test_lcg_shuffle() -> None:

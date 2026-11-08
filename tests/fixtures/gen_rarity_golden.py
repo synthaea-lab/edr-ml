@@ -29,7 +29,7 @@ def snap(common: list[str], hosts: int) -> dict:
     return {"common": common, "hosts_covered": hosts}
 
 
-# (name, sha256, snapshot, min_hosts)
+# Each case is a name, a sha256, a snapshot and the min_hosts floor.
 CASES: list[tuple[str, str | None, dict | None, int]] = [
     ("known_and_common", H1, snap([H1, H2], 10), 5),
     ("known_and_rare", H2, snap([H1], 10), 5),

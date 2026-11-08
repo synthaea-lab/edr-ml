@@ -79,11 +79,11 @@ def test_mutation_features_match_golden(row: dict) -> None:
     assert len(features_mutated) == len(expected_features_mutated), \
         "mutated features length mismatch"
 
-    for i, (got_orig, expected_orig) in enumerate(zip(features_original, expected_features_original)):
+    for i, (got_orig, expected_orig) in enumerate(zip(features_original, expected_features_original, strict=True)):
         assert got_orig == pytest.approx(expected_orig, rel=1e-6, abs=1e-9), \
             f"original feature[{i}] mismatch: {got_orig} != {expected_orig}"
 
-    for i, (got_mut, expected_mut) in enumerate(zip(features_mutated, expected_features_mutated)):
+    for i, (got_mut, expected_mut) in enumerate(zip(features_mutated, expected_features_mutated, strict=True)):
         assert got_mut == pytest.approx(expected_mut, rel=1e-6, abs=1e-9), \
             f"mutated feature[{i}] mismatch: {got_mut} != {expected_mut}"
 

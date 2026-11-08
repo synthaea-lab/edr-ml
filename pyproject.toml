@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["ruff>=0.6", "pytest>=8"]
+dev = ["ruff==0.17.0", "mypy==2.4.1", "types-PyYAML==6.0.12.20261103", "pytest>=8"]
 
 [tool.setuptools.packages.find]
 include = ["synthaea_ml*"]
@@ -28,5 +28,125 @@ include = ["synthaea_ml*"]
 [tool.ruff]
 line-length = 100
 
+[tool.ruff.lint]
+# Beyond the pycodestyle/pyflakes defaults: bugbear, simplifications, complexity and
+# argument-count limits, unused arguments, commented-out code, security, print in
+# library code, imports, upgrades, timezone-aware datetimes and docstrings on the public
+# API (D1). Annotations (ANN) are left to mypy strict, which rejects untyped defs.
+select = [
+    "E4", "E7", "E9", "F", "W", "I", "UP",
+    "B", "SIM", "C4", "PIE", "C90", "PLR0912", "PLR0913",
+    "ARG", "ERA", "S", "T20", "DTZ", "BLE", "D1",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+# Every entry below is a known exception. The pre-existing complexity, print,
+# argument-count and missing-docstring findings in library modules are a ratchet: an
+# entry only ever leaves this table, never joins it.
+[tool.ruff.lint.per-file-ignores]
+# Tests and fixture generators: pytest asserts, throwaway /tmp paths and seeded
+# non-crypto randomness are the point; fakes mirror the signature of what they
+# monkeypatch (unused arguments, many parameters) and generators report on stdout.
+# Test functions are not public API, so D1 does not apply.
+# Ruff reads UPPER_CASE module attributes as constants, so `assert t1.FEATURE_NAMES ==
+# expected` looks like a Yoda condition when it is the usual actual-then-expected order.
+"tests/**" = ["S101", "S108", "S311", "ARG001", "ARG005", "PLR0913", "T201", "SIM300", "D1"]
+"tests/test_train_behavior.py" = ["C901"]
+# Command-line entry points: stdout is their user interface.
+"synthaea_ml/data/aggregate_correlation.py" = ["T201", "D103"]
+"synthaea_ml/data/capture_to_baseline.py" = ["T201", "D103"]
+"synthaea_ml/evaluation/t1_lineage_gain.py" = ["T201", "D103"]
+"synthaea_ml/export/verify_onnx.py" = ["T201", "B007", "D103"]
+"synthaea_ml/training/train_behavior.py" = ["T201", "D103"]
+"synthaea_ml/training/train_correlation.py" = ["T201", "D103"]
+"synthaea_ml/training/train_linux.py" = ["T201", "D103"]
+"synthaea_ml/training/train_windows.py" = ["T201", "D103"]
+"synthaea_ml/calibration/calibrate_llr.py" = ["T201", "C901", "PLR0912", "D103"]
+"synthaea_ml/data/manifest.py" = ["T201", "PLR0913", "D102"]
+"synthaea_ml/evaluation/robustness_cli.py" = ["T201", "C901", "PLR0912", "D103"]
+"synthaea_ml/training/train_site_rarity.py" = ["T201", "PLR0913", "D101", "D102", "D103", "D107"]
+# The global-model floor check unpickles a model the operator trained locally.
+"synthaea_ml/training/train_site_model.py" = ["T201", "S301", "D103"]
+# Self-tests under `if __name__ == "__main__"` that mirror the Rust unit tests.
+"synthaea_ml/features/behavior.py" = ["S101", "T201"]
+"synthaea_ml/features/correlation.py" = ["S101", "T201"]
+# Paths such as /tmp/x.sh are command-line and event *data* here, never files opened.
+"synthaea_ml/features/combined.py" = ["S108", "SIM108"]
+"synthaea_ml/features/lineage.py" = ["S108"]
+"synthaea_ml/evaluation/mutations/lineage.py" = ["S108", "ARG002", "D102"]
+"synthaea_ml/evaluation/mutations/cmdline.py" = ["S108", "ARG002", "C901", "ERA001", "D102"]
+"synthaea_ml/evaluation/robustness.py" = ["S108", "ARG001", "C901", "PLR0912", "PLR0913"]
+"synthaea_ml/registry/training_record.py" = ["PLR0913"]
+# Public functions, methods and classes still without a docstring (pydocstyle D1).
+"synthaea_ml/evaluation/onnx_model.py" = ["D102", "D107"]
+"synthaea_ml/features/cmdline.py" = ["D103"]
+"synthaea_ml/features/rarity.py" = ["D102"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["synthaea_ml"]
+strict = true
+warn_unreachable = true
+
+# scikit-learn, skl2onnx and onnxruntime ship neither inline types nor stubs.
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "skl2onnx.*", "onnxruntime.*", "onnx.*"]
+ignore_missing_imports = true
+
+# Baseline: the error codes each module still raises under strict mode, disabled for
+# that module only. A ratchet: an entry only ever shrinks or leaves; every other
+# module, and every other error code in these, is fully checked.
+#
+# Untyped `dict`/`list` for wire events, flat events and corpus records.
+[[tool.mypy.overrides]]
+module = [
+    "synthaea_ml.calibration.calibrate_llr",
+    "synthaea_ml.data.aggregate_correlation",
+    "synthaea_ml.data.canonical",
+    "synthaea_ml.features.combined",
+    "synthaea_ml.features.correlation",
+    "synthaea_ml.features.lineage",
+]
+disable_error_code = ["type-arg"]
+
+[[tool.mypy.overrides]]
+module = "synthaea_ml.features.behavior"
+disable_error_code = ["type-arg", "no-untyped-call"]
+
+[[tool.mypy.overrides]]
+module = "synthaea_ml.evaluation.mutations.prng"
+disable_error_code = ["type-arg", "no-untyped-def"]
+
+# Optional mapping keys passed where a str is required.
+[[tool.mypy.overrides]]
+module = "synthaea_ml.evaluation.mutations.lineage"
+disable_error_code = ["arg-type"]
+
+# ConformalCalibration and FeatureBounds are defined twice (calibration and registry),
+# so the trainers pass one where the other is declared.
+[[tool.mypy.overrides]]
+module = [
+    "synthaea_ml.training.train_behavior",
+    "synthaea_ml.training.train_linux",
+    "synthaea_ml.training.train_windows",
+]
+disable_error_code = ["arg-type"]
+
+[[tool.mypy.overrides]]
+module = "synthaea_ml.training.train_site_rarity"
+disable_error_code = ["arg-type", "no-any-return"]
+
+[[tool.mypy.overrides]]
+module = "synthaea_ml.training.train_site_model"
+disable_error_code = ["no-untyped-def", "no-untyped-call"]
+
+# The hand-written record decoder iterates `object` values; its `type: ignore`
+# comments name the wrong codes.
+[[tool.mypy.overrides]]
+module = "synthaea_ml.registry.training_record"
+disable_error_code = ["attr-defined", "unused-ignore"]

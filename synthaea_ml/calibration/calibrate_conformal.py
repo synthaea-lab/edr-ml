@@ -11,53 +11,21 @@ References:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
+# The result types are part of the model record schema, so the registry owns
+# them; they are re-exported here for callers of the calibration API.
+from synthaea_ml.registry.training_record import ConformalCalibration, FeatureBounds
 
-@dataclass(frozen=True)
-class ConformalCalibration:
-    """Conformal prediction calibration metadata.
-
-    Records the threshold computed from a calibration set to meet a stated FP
-    budget (e.g., ≤5 false positives per endpoint per day).
-    """
-
-    fp_budget_per_endpoint_day: float
-    """Maximum acceptable false positives per endpoint per day (e.g., 5.0)."""
-
-    threshold: float
-    """decision_function threshold: anomaly if score < threshold."""
-
-    calibration_set_size: int
-    """Number of samples in the calibration set (30% of training data)."""
-
-    benign_baseline_rate: float
-    """Estimated benign events per endpoint per day (for FP rate conversion)."""
-
-    calibrated_at: str
-    """ISO 8601 UTC timestamp when calibration was performed."""
-
-
-@dataclass(frozen=True)
-class FeatureBounds:
-    """Per-feature [min, max] bounds for out-of-distribution detection.
-
-    Computed from the training set (70%) with a margin to avoid false OOD
-    rejections on legitimate edge cases.
-    """
-
-    feature_names: list[str]
-    """Feature names in order (must match model input)."""
-
-    min_values: list[float]
-    """Minimum allowed value per feature (inclusive)."""
-
-    max_values: list[float]
-    """Maximum allowed value per feature (inclusive)."""
+__all__ = [
+    "ConformalCalibration",
+    "FeatureBounds",
+    "calibrate_threshold",
+    "compute_feature_bounds",
+]
 
 
 def calibrate_threshold(
