@@ -20,7 +20,6 @@ turns it into the ADR-0009 record.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import platform
 from datetime import UTC, datetime
@@ -28,6 +27,7 @@ from pathlib import Path
 
 import yaml
 
+from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.training_record import (
     Environment,
     ExpectedDetection,
@@ -35,16 +35,6 @@ from synthaea_ml.registry.training_record import (
     ScenarioReplayResult,
     compute_passed,
 )
-
-_HASH_CHUNK = 1 << 16  # 64 KiB, matches training_record.py's own helper.
-
-
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(_HASH_CHUNK), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def load_expected_detections(scenario_yaml: Path) -> tuple[str, list[ExpectedDetection]]:
@@ -152,7 +142,7 @@ def run_replay(
 
     return ScenarioReplayResult(
         scenario_name=scenario_name,
-        scenario_yaml_sha256=_sha256_file(scenario_yaml),
+        scenario_yaml_sha256=sha256_file(scenario_yaml),
         run_at=run_at or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         environment=environment or detect_environment(),
         expected_detections=expected,

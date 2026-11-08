@@ -56,7 +56,6 @@ Input: a site corpus JSONL (`{timestamp, event_type, event, agent_id}` per line,
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -78,6 +77,7 @@ from synthaea_ml.data.common_set import (
 from synthaea_ml.evaluation.onnx_model import ShippedModel, load_shipped_model
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features import cmdline, rarity
+from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
 from synthaea_ml.registry.training_record import DatasetVersion, write_training_record
 from synthaea_ml.training.config import (
@@ -488,7 +488,7 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    corpus_sha = hashlib.sha256(args.site_corpus.read_bytes()).hexdigest()
+    corpus_sha = sha256_file(args.site_corpus)
     write_training_record(
         args.output_dir,
         training_script=TRAINING_SCRIPT,

@@ -26,12 +26,11 @@ from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.evaluation.mutations.base import Mutator
 from synthaea_ml.evaluation.mutations.cmdline import ALL_T0_MUTATORS
 from synthaea_ml.evaluation.mutations.prng import LCG
-from synthaea_ml.evaluation.scenario_replay import _sha256_file, load_expected_detections
+from synthaea_ml.evaluation.scenario_replay import load_expected_detections
 from synthaea_ml.features import correlation, t1
 from synthaea_ml.features.cmdline import extract_features
+from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.training_record import MutationTestResult, RobustnessCard
-
-_HASH_CHUNK = 1 << 16  # 64 KiB, matches scenario_replay.py
 
 
 def _score_cmdline(model: Any, cmdline: str, threshold: float) -> float:
@@ -227,7 +226,7 @@ def run_robustness_evaluation(
 
     return RobustnessCard(
         scenario_name=scenario_name,
-        scenario_yaml_sha256=_sha256_file(scenario_yaml),
+        scenario_yaml_sha256=sha256_file(scenario_yaml),
         tested_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         mutation_results=results,
         escape_rate=escape_rate,

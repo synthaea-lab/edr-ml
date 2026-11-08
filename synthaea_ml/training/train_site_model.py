@@ -42,6 +42,7 @@ from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features.cmdline import extract_features
+from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.layout import MODEL_FILENAME
 from synthaea_ml.registry.training_record import (
     DatasetVersion,
@@ -256,7 +257,7 @@ def main():
     # Add site corpus as dataset version
     site_corpus_version = DatasetVersion(
         name=f"site-corpus-{args.site_name}",
-        baseline_sha256=compute_file_sha256(args.site_corpus),
+        baseline_sha256=sha256_file(args.site_corpus),
         sample_count=len(site_corpus),
     )
     dataset_versions.append(site_corpus_version)
@@ -273,16 +274,6 @@ def main():
     print(f"   Global corpus: {len(global_corpus)} samples")
     print(f"   Site corpus: {len(site_corpus)} samples")
     print(f"   Combined: {len(combined)} samples")
-
-
-def compute_file_sha256(file_path: Path) -> str:
-    """Compute SHA-256 hash of file."""
-    import hashlib
-    sha256 = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            sha256.update(chunk)
-    return sha256.hexdigest()
 
 
 if __name__ == "__main__":
