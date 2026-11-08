@@ -20,6 +20,7 @@ from sklearn.ensemble import IsolationForest
 
 from synthaea_ml.calibration import calibrate_threshold
 from synthaea_ml.training import train_site_rarity as rare
+from synthaea_ml.training.config import CALIBRATION
 
 BEACON = sibling("scenarios", "scenarios", "beacon.yaml")
 pytestmark = needs("scenarios", "scenarios", "beacon.yaml")
@@ -45,13 +46,13 @@ def _models(withheld_fraction: float):
     train, cal_slice, test = slice(0, 1400), slice(1400, 1700), slice(1700, 2000)
     base = IsolationForest(n_estimators=100, random_state=42).fit(x_base[train])
     base_cal = calibrate_threshold(
-        base, x_base[cal_slice], fp_budget=rare.FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=rare.BENIGN_RATE_PER_DAY,
+        base, x_base[cal_slice], fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     )
     cand = IsolationForest(n_estimators=100, random_state=42).fit(x_rare[train])
     cand_cal = calibrate_threshold(
-        cand, x_rare[cal_slice], fp_budget=rare.FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=rare.BENIGN_RATE_PER_DAY,
+        cand, x_rare[cal_slice], fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     )
     return cand, cand_cal, base, base_cal, x_base[test]
 

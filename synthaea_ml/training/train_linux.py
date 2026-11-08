@@ -41,51 +41,20 @@ from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features.cmdline import FEATURE_NAMES, extract_features
+from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
 from synthaea_ml.registry.training_record import (
     RobustnessCard,
     dataset_version_from_manifest,
     write_training_record,
 )
+from synthaea_ml.training.config import CALIBRATION, CMDLINE_FOREST, RANDOM_SEED
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_linux.py"
-MODEL_FILENAME = "model.onnx"
-METADATA_FILENAME = "model_metadata.json"
-
-# Conformal calibration parameters (issue #46)
-FP_BUDGET_PER_ENDPOINT_DAY = 5.0
-"""Maximum acceptable false positives per endpoint per day."""
-
-BENIGN_RATE_PER_DAY = 1000.0
-"""Estimated benign events per endpoint per day (for FP rate conversion).
-
-This is a conservative estimate — production endpoints may see more or fewer
-events depending on workload. The threshold can be recalibrated when larger
-baselines become available (#44).
-"""
-
-FEATURE_BOUNDS_MARGIN = 0.05
-"""Relative margin for feature bounds (5% expansion beyond observed min/max)."""
-
-# contamination=0.05, a deliberate decision after testing 0.02 (see this file's git
-# history). At 0.02, the curl healthcheck false positive disappeared but the ML signal on
-# a short, real malicious case (the isolated `base64 -d` exec event, captured in the lab
-# on 2026-08-24: cmdline = "base64\0-d\0") collapsed to nearly zero (score -0.001, versus
-# -0.035 at 0.05) - with only 71 baseline examples, the model's boundary is too fuzzy to
-# eliminate this false positive without losing the signal on the true positive. Explicit
-# choice: keep a sharp ML signal on the malicious case rather than a silent ML on a
-# benign one, especially since this scenario is intercepted anyway by the deterministic
-# T1059.004 rule regardless of the ML score (see threat-model.md - ML is never the final
-# judge). The curl healthcheck false positive at 0.05 thus remains a known and accepted
-# limitation (already documented before these features were added, see docs/PLAN.md).
-HYPERPARAMETERS: dict[str, object] = {
-    "n_estimators": 100,
-    "contamination": 0.05,
-    "random_state": 42,
-}
 
 # Linux sanity check - mirror of SANITY_CHECK_SAMPLES on the Windows side.
 # Benign: taken as-is from the captured baseline. Suspicious: the isolated `base64 -d`
-# exec event captured in the lab on 2026-08-24 (see the contamination comment above)
+# exec event captured in the lab on 2026-08-24 (see the contamination comment on
+# `config.CMDLINE_FOREST`)
 # and the Docker healthcheck documented as a known false positive (docs/PLAN.md) -
 # included here to track it, not because it necessarily has to score as an anomaly.
 SANITY_CHECK_SAMPLES = {
@@ -191,31 +160,31 @@ def main() -> None:
     X = np.array([extract_features(c) for c in cmdlines], dtype=np.float32)
 
     # Split 70/30 for conformal calibration (issue #46)
-    X_train, X_cal = train_test_split(X, test_size=0.3, random_state=42)
+    X_train, X_cal = train_test_split(X, test_size=0.3, random_state=RANDOM_SEED)
     print(f"Split: {len(X_train)} training, {len(X_cal)} calibration")
 
-    clf = IsolationForest(**HYPERPARAMETERS)
+    clf = IsolationForest(**CMDLINE_FOREST.hyperparameters())
     clf.fit(X_train)
 
     # Conformal calibration: compute threshold for FP budget
     conformal_cal = calibrate_threshold(
         clf,
         X_cal,
-        fp_budget=FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=BENIGN_RATE_PER_DAY,
+        fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     )
     print(
         f"Conformal calibration: threshold={conformal_cal.threshold:.4f} "
-        f"for ≤{FP_BUDGET_PER_ENDPOINT_DAY} FP/endpoint/day"
+        f"for ≤{CALIBRATION.fp_budget_per_endpoint_day} FP/endpoint/day"
     )
 
     # Compute feature bounds for OOD detection
     bounds = compute_feature_bounds(
         X_train,
         list(FEATURE_NAMES),
-        margin=FEATURE_BOUNDS_MARGIN,
+        margin=CALIBRATION.feature_bounds_margin,
     )
-    print(f"Feature bounds computed with {FEATURE_BOUNDS_MARGIN*100}% margin")
+    print(f"Feature bounds computed with {CALIBRATION.feature_bounds_margin * 100}% margin")
 
     # skl2onnx 1.20 does not yet follow the `ai.onnx.ml` v4 domain emitted by default
     # with onnx 1.22 - explicitly pinned to the latest version this skl2onnx can consume.
@@ -248,7 +217,7 @@ def main() -> None:
                     model=clf,
                     scenario_yaml=scenario_path,
                     tier="T0",
-                    mutation_seed=42,
+                    mutation_seed=RANDOM_SEED,
                     events_source=args.robustness_events,
                 )
                 robustness_cards.append(card)
@@ -267,7 +236,7 @@ def main() -> None:
         training_script=TRAINING_SCRIPT,
         dataset_versions=dataset_versions,
         robustness_cards=robustness_cards,
-        hyperparameters=HYPERPARAMETERS,
+        hyperparameters=CMDLINE_FOREST.hyperparameters(),
         conformal_calibration=conformal_cal,
         feature_bounds=bounds,
     )

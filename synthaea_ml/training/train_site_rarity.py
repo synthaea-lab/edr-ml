@@ -28,7 +28,7 @@ run also measures, on the same test slice with the rarity forced to withheld:
 - with `--robustness-scenarios`, the escape rate and median degradation of the adversarial
   scenario suite, scoring the candidate with the rarity withheld against the cmdline-only model
   of the same corpus, each at its own calibrated threshold, with the tolerances of
-  `train_site_model.py`'s floor check.
+  `train_site_model.py`'s floor check (`config.FLOOR_TOLERANCE`).
 
 With `--global-model-dir` (the shipped `model.onnx`, and `model_metadata.json` for its
 threshold, scored through onnxruntime as the agent does) the same two checks are made against
@@ -78,11 +78,16 @@ from synthaea_ml.data.common_set import (
 from synthaea_ml.evaluation.onnx_model import ShippedModel, load_shipped_model
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features import cmdline, rarity
+from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
 from synthaea_ml.registry.training_record import DatasetVersion, write_training_record
+from synthaea_ml.training.config import (
+    CALIBRATION,
+    CMDLINE_FOREST,
+    FLOOR_TOLERANCE,
+    RANDOM_SEED,
+)
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_site_rarity.py"
-MODEL_FILENAME = "model.onnx"
-METADATA_FILENAME = "model_metadata.json"
 FEATURE_NAMES = [*cmdline.FEATURE_NAMES, *rarity.FEATURE_NAMES]
 
 DEFAULT_MIN_HOSTS = 5
@@ -92,22 +97,9 @@ MIN_ROWS = 60
 TRAIN_FRACTION = 0.7
 CALIBRATION_FRACTION = 0.15
 
-FP_BUDGET_PER_ENDPOINT_DAY = 5.0
-BENIGN_RATE_PER_DAY = 1000.0
-FEATURE_BOUNDS_MARGIN = 0.05
-
 WITHHELD_FP_MARGIN = 0.01
 """How far above the cmdline-only model's test false-positive rate the candidate's rate may be
 with the rarity withheld (one percentage point). A starting point, to calibrate on a real corpus."""
-ESCAPE_RATE_TOLERANCE = 0.05
-DEGRADATION_TOLERANCE = 0.10
-"""The tolerances of `train_site_model.run_global_floor_check`, so the two floors read alike."""
-
-HYPERPARAMETERS: dict[str, object] = {
-    "n_estimators": 100,
-    "contamination": 0.05,
-    "random_state": 42,
-}
 
 
 def load_corpus(path: Path) -> list[dict[str, Any]]:
@@ -167,15 +159,15 @@ def fit_and_measure(
     """Trains on the early slice, calibrates on the middle one, and returns
     `(model, conformal_calibration, feature_bounds, test_fp_rate)`."""
     train, calibration, test = time_split(len(x))
-    clf = IsolationForest(**HYPERPARAMETERS)
+    clf = IsolationForest(**CMDLINE_FOREST.hyperparameters())
     clf.fit(x[train])
     cal = calibrate_threshold(
         clf,
         x[calibration],
-        fp_budget=FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=BENIGN_RATE_PER_DAY,
+        fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     )
-    bounds = compute_feature_bounds(x[train], names, margin=FEATURE_BOUNDS_MARGIN)
+    bounds = compute_feature_bounds(x[train], names, margin=CALIBRATION.feature_bounds_margin)
     scores = clf.decision_function(x[test])
     fp_rate = float((scores < cal.threshold).mean()) if len(scores) else 0.0
     return clf, cal, bounds, fp_rate
@@ -244,7 +236,7 @@ def compare_on_scenarios(
         name = Path(scenario).stem
         try:
             ref_card = run_robustness_evaluation(
-                reference, scenario, tier="T0", mutation_seed=42, threshold=reference_threshold
+                reference, scenario, tier="T0", mutation_seed=RANDOM_SEED, threshold=reference_threshold
             )
         except ValueError as error:
             # Nothing the reference detects: there is nothing for the candidate to lose here.
@@ -252,7 +244,7 @@ def compare_on_scenarios(
             continue
         try:
             cand_card = run_robustness_evaluation(
-                withheld_model, scenario, tier="T0", mutation_seed=42, threshold=candidate_threshold
+                withheld_model, scenario, tier="T0", mutation_seed=RANDOM_SEED, threshold=candidate_threshold
             )
         except ValueError as error:
             failures.append(
@@ -265,15 +257,19 @@ def compare_on_scenarios(
             f"({reference_name}), median degradation {cand_card.median_score_degradation:.3f} vs "
             f"{ref_card.median_score_degradation:.3f}"
         )
-        if cand_card.escape_rate > ref_card.escape_rate + ESCAPE_RATE_TOLERANCE:
+        if cand_card.escape_rate > ref_card.escape_rate + FLOOR_TOLERANCE.escape_rate:
             failures.append(
                 f"{name}: escape rate {cand_card.escape_rate:.2%} is above the {reference_name}'s "
-                f"{ref_card.escape_rate:.2%} + {ESCAPE_RATE_TOLERANCE:.0%}"
+                f"{ref_card.escape_rate:.2%} + {FLOOR_TOLERANCE.escape_rate:.0%}"
             )
-        if cand_card.median_score_degradation > ref_card.median_score_degradation + DEGRADATION_TOLERANCE:
+        if (
+            cand_card.median_score_degradation
+            > ref_card.median_score_degradation + FLOOR_TOLERANCE.median_degradation
+        ):
             failures.append(
                 f"{name}: median degradation {cand_card.median_score_degradation:.3f} is above "
-                f"the {reference_name}'s {ref_card.median_score_degradation:.3f} + {DEGRADATION_TOLERANCE:.2f}"
+                f"the {reference_name}'s {ref_card.median_score_degradation:.3f} + "
+                f"{FLOOR_TOLERANCE.median_degradation:.2f}"
             )
     return lines, failures
 
@@ -440,11 +436,11 @@ def main() -> None:
 
     base_clf, base_cal, _, base_fp = fit_and_measure(x_base, list(cmdline.FEATURE_NAMES))
     train_rows, _, test_rows = time_split(len(x_rare))
-    x_fit = withhold_rows(x_rare, args.withhold_fraction, HYPERPARAMETERS["random_state"], train_rows)
+    x_fit = withhold_rows(x_rare, args.withhold_fraction, CMDLINE_FOREST.random_state, train_rows)
     clf, cal, bounds, rare_fp = fit_and_measure(x_fit, FEATURE_NAMES)
     print(
         f"test-slice false-positive rate: cmdline only {base_fp:.2%}, "
-        f"with rarity {rare_fp:.2%} (budget {FP_BUDGET_PER_ENDPOINT_DAY:g}/endpoint/day)"
+        f"with rarity {rare_fp:.2%} (budget {CALIBRATION.fp_budget_per_endpoint_day:g}/endpoint/day)"
     )
 
     floor = check_rarity_floor(clf, cal, base_clf, base_cal, x_base[test_rows], args.robustness_scenarios)
@@ -503,7 +499,7 @@ def main() -> None:
                 sample_count=len(records),
             )
         ],
-        hyperparameters=HYPERPARAMETERS,
+        hyperparameters=CMDLINE_FOREST.hyperparameters(),
         conformal_calibration=cal,
         feature_bounds=bounds,
         extra={
