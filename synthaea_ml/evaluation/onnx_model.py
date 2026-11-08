@@ -14,8 +14,8 @@ from typing import Any
 import numpy as np
 import onnxruntime as ort
 
-MODEL_FILENAME = "model.onnx"
-METADATA_FILENAME = "model_metadata.json"
+from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
+
 SCORES_OUTPUT = "scores"
 
 
