@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,8 @@ name = "synthaea-ml"
 version = "0.1.0"
 description = "Synthaea ML space: features, training, calibration, evaluation, ONNX export"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 # The feature/calibration modules are pure stdlib; the heavier deps serve training,
 # export, and the ONNX oracle.
 dependencies = [
