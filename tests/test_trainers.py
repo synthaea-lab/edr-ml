@@ -107,8 +107,7 @@ def test_train_linux_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert record.training_script == "synthaea_ml/training/train_linux.py"
     assert len(record.dataset_versions) == 1
     assert record.dataset_versions[0].sample_count == len(_LINUX_SAMPLES)
-    assert record.hyperparameters["n_estimators"] == 100
-    assert record.hyperparameters["contamination"] == 0.05
+    assert record.hyperparameters == {"n_estimators": 100, "contamination": 0.05, "random_state": 42}
 
 
 def test_train_linux_rejects_mutated_baseline(
@@ -170,6 +169,7 @@ def test_train_windows_end_to_end(
     assert record.dataset_versions[0].sample_count == len(_WINDOWS_SAMPLES)
     # Windows-side name derivation must survive a hyphenated workload label.
     assert "__desktop-user__" in record.dataset_versions[0].name
+    assert record.hyperparameters == {"n_estimators": 100, "contamination": 0.05, "random_state": 42}
 
 
 def test_train_windows_rejects_mutated_baseline(

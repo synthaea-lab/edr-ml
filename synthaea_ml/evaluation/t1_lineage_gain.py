@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -53,12 +53,8 @@ from synthaea_ml.data.behavior_dataset import (
 )
 from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME
 from synthaea_ml.features import correlation, lineage, t1
-from synthaea_ml.training.train_behavior import (
-    BENIGN_RATE_PER_DAY,
-    FP_BUDGET_PER_ENDPOINT_DAY,
-    HYPERPARAMETERS,
-    MIN_SAMPLES,
-)
+from synthaea_ml.training.config import BEHAVIOR_FOREST, CALIBRATION
+from synthaea_ml.training.train_behavior import MIN_SAMPLES
 
 # The baseline is the T1 vector without its lineage block: the lineage features come last.
 # The shipped T1 vector has no lineage (ADR-0034); this tool is what justified that, and what
@@ -126,13 +122,13 @@ def _one_split(
 ) -> tuple[float, float, float]:
     """Detection rate, false-positive rate and AUC of one variant on one split."""
     train, cal, test = _split(benign, seed)
-    model = IsolationForest(**{**HYPERPARAMETERS, "random_state": seed})
+    model = IsolationForest(**replace(BEHAVIOR_FOREST, random_state=seed).hyperparameters())
     model.fit(train[:, :columns])
     threshold = calibrate_threshold(
         model,
         cal[:, :columns],
-        fp_budget=FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=BENIGN_RATE_PER_DAY,
+        fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     ).threshold
     benign_scores = model.decision_function(test[:, :columns])
     malicious_scores = model.decision_function(malicious[:, :columns])
@@ -188,7 +184,7 @@ def measure_gain(benign: np.ndarray, malicious: np.ndarray, seeds: int = 20) -> 
         benign_distinct_vectors=len(benign),
         malicious_distinct_vectors=len(malicious),
         seeds=seeds,
-        fp_budget_per_endpoint_day=FP_BUDGET_PER_ENDPOINT_DAY,
+        fp_budget_per_endpoint_day=CALIBRATION.fp_budget_per_endpoint_day,
         without_lineage=summarize("without_lineage"),
         with_lineage=summarize("with_lineage"),
         auc_gain_mean=float(auc_gain.mean()),

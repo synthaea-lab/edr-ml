@@ -185,6 +185,7 @@ def test_the_site_rarity_run_trains_both_models_and_records_the_effect(
 
     record = load_training_record(out)
     assert record.dataset_versions[0].name == "site-corpus-acme"
+    assert record.hyperparameters == {"n_estimators": 100, "contamination": 0.05, "random_state": 42}
     extra = record.extra
     assert 0.0 < float(extra["rarity_known_fraction"]) <= 1.0
     for key in ("fp_rate_test_cmdline_only", "fp_rate_test_with_rarity"):

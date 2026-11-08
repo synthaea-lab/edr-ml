@@ -42,21 +42,15 @@ from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features.cmdline import extract_features
+from synthaea_ml.registry.layout import MODEL_FILENAME
 from synthaea_ml.registry.training_record import (
     DatasetVersion,
     dataset_version_from_manifest,
     write_training_record,
 )
+from synthaea_ml.training.config import CMDLINE_FOREST, FLOOR_TOLERANCE, RANDOM_SEED
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_site_model.py"
-MODEL_FILENAME = "model.onnx"
-
-# Inherit hyperparameters from train_linux.py
-HYPERPARAMETERS: dict[str, object] = {
-    "n_estimators": 100,
-    "contamination": 0.05,
-    "random_state": 42,
-}
 
 
 def load_global_baseline(baseline_dir: Path) -> list[str]:
@@ -156,7 +150,7 @@ def run_global_floor_check(
         model=global_model,
         scenario_yaml=scenario_yaml,
         tier="T0",
-        mutation_seed=42,
+        mutation_seed=RANDOM_SEED,
     )
 
     print("Evaluating site model...")
@@ -164,7 +158,7 @@ def run_global_floor_check(
         model=site_model,
         scenario_yaml=scenario_yaml,
         tier="T0",
-        mutation_seed=42,
+        mutation_seed=RANDOM_SEED,
     )
 
     # Compare metrics
@@ -172,8 +166,11 @@ def run_global_floor_check(
     print(f"Site model:   escape_rate={site_card.escape_rate:.2%}, median_degradation={site_card.median_score_degradation:.3f}")
 
     # Floor check: site model must not regress vs global
-    escape_ok = site_card.escape_rate <= global_card.escape_rate + 0.05  # Allow 5% increase
-    degradation_ok = site_card.median_score_degradation <= global_card.median_score_degradation + 0.10  # Allow 0.10 increase
+    escape_ok = site_card.escape_rate <= global_card.escape_rate + FLOOR_TOLERANCE.escape_rate
+    degradation_ok = (
+        site_card.median_score_degradation
+        <= global_card.median_score_degradation + FLOOR_TOLERANCE.median_degradation
+    )
 
     if escape_ok and degradation_ok:
         print("✅ Global-model-floor check PASSED")
@@ -181,9 +178,15 @@ def run_global_floor_check(
     else:
         print("❌ Global-model-floor check FAILED")
         if not escape_ok:
-            print(f"   - Escape rate regression: {site_card.escape_rate:.2%} > {global_card.escape_rate:.2%} + 5%")
+            print(
+                f"   - Escape rate regression: {site_card.escape_rate:.2%} > "
+                f"{global_card.escape_rate:.2%} + {FLOOR_TOLERANCE.escape_rate:.0%}"
+            )
         if not degradation_ok:
-            print(f"   - Median degradation regression: {site_card.median_score_degradation:.3f} > {global_card.median_score_degradation:.3f} + 0.10")
+            print(
+                f"   - Median degradation regression: {site_card.median_score_degradation:.3f} > "
+                f"{global_card.median_score_degradation:.3f} + {FLOOR_TOLERANCE.median_degradation:.2f}"
+            )
         return False
 
 
@@ -219,7 +222,7 @@ def main():
 
     # Train model
     print("\n=== Training Isolation Forest ===")
-    clf = IsolationForest(**HYPERPARAMETERS)
+    clf = IsolationForest(**CMDLINE_FOREST.hyperparameters())
     clf.fit(X)
     print(f"Trained on {len(combined)} samples")
 

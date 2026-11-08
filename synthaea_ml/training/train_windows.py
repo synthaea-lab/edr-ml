@@ -43,31 +43,15 @@ from synthaea_ml.calibration import (
 from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features.cmdline import FEATURE_NAMES, extract_features
+from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
 from synthaea_ml.registry.training_record import (
     RobustnessCard,
     dataset_version_from_manifest,
     write_training_record,
 )
+from synthaea_ml.training.config import CALIBRATION, CMDLINE_FOREST, RANDOM_SEED
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_windows.py"
-MODEL_FILENAME = "model.onnx"
-METADATA_FILENAME = "model_metadata.json"
-
-# Conformal calibration parameters (issue #46)
-FP_BUDGET_PER_ENDPOINT_DAY = 5.0
-BENIGN_RATE_PER_DAY = 1000.0
-FEATURE_BOUNDS_MARGIN = 0.05
-
-# contamination=0.05 - same value as the Linux model (train_linux.py), for the same
-# reason: with a baseline example count of the same order of magnitude, a lower
-# contamination (0.02) would drown the ML signal on short true positives (e.g. an
-# isolated `base64 -d`) with no real gain on false positives. See train_linux.py's
-# HYPERPARAMETERS comment for the full decision context.
-HYPERPARAMETERS: dict[str, object] = {
-    "n_estimators": 100,
-    "contamination": 0.05,
-    "random_state": 42,
-}
 
 # Windows sanity check - distinguishes legitimate vs suspicious cmdlines.
 # The benign cmdlines reflect the ETW format (full image path, few arguments).
@@ -182,31 +166,31 @@ def main() -> None:
     X = np.array([extract_features(c) for c in cmdlines], dtype=np.float32)
 
     # Split 70/30 for conformal calibration (issue #46)
-    X_train, X_cal = train_test_split(X, test_size=0.3, random_state=42)
+    X_train, X_cal = train_test_split(X, test_size=0.3, random_state=RANDOM_SEED)
     print(f"Split: {len(X_train)} training, {len(X_cal)} calibration")
 
-    clf = IsolationForest(**HYPERPARAMETERS)
+    clf = IsolationForest(**CMDLINE_FOREST.hyperparameters())
     clf.fit(X_train)
 
     # Conformal calibration: compute threshold for FP budget
     conformal_cal = calibrate_threshold(
         clf,
         X_cal,
-        fp_budget=FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=BENIGN_RATE_PER_DAY,
+        fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     )
     print(
         f"Conformal calibration: threshold={conformal_cal.threshold:.4f} "
-        f"for ≤{FP_BUDGET_PER_ENDPOINT_DAY} FP/endpoint/day"
+        f"for ≤{CALIBRATION.fp_budget_per_endpoint_day} FP/endpoint/day"
     )
 
     # Compute feature bounds for OOD detection
     bounds = compute_feature_bounds(
         X_train,
         list(FEATURE_NAMES),
-        margin=FEATURE_BOUNDS_MARGIN,
+        margin=CALIBRATION.feature_bounds_margin,
     )
-    print(f"Feature bounds computed with {FEATURE_BOUNDS_MARGIN*100}% margin")
+    print(f"Feature bounds computed with {CALIBRATION.feature_bounds_margin * 100}% margin")
 
     # skl2onnx 1.20 does not yet follow the `ai.onnx.ml` v4 domain emitted by default
     # with onnx 1.22 - explicitly pinned to the latest version this skl2onnx can consume.
@@ -239,7 +223,7 @@ def main() -> None:
                     model=clf,
                     scenario_yaml=scenario_path,
                     tier="T0",
-                    mutation_seed=42,
+                    mutation_seed=RANDOM_SEED,
                     events_source=args.robustness_events,
                 )
                 robustness_cards.append(card)
@@ -258,7 +242,7 @@ def main() -> None:
         training_script=TRAINING_SCRIPT,
         dataset_versions=dataset_versions,
         robustness_cards=robustness_cards,
-        hyperparameters=HYPERPARAMETERS,
+        hyperparameters=CMDLINE_FOREST.hyperparameters(),
         conformal_calibration=conformal_cal,
         feature_bounds=bounds,
     )

@@ -219,6 +219,7 @@ def test_train_behavior_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 
     record = load_training_record(out)
     assert record.training_script == "synthaea_ml/training/train_behavior.py"
+    assert record.hyperparameters == {"n_estimators": 100, "contamination": 0.05, "random_state": 42}
     assert record.dataset_versions[0].sample_count == len(
         (d / BEHAVIOR_CAPTURE_FILENAME).read_text(encoding="utf-8").splitlines()
     )

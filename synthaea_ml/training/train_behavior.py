@@ -41,29 +41,15 @@ from synthaea_ml.data.behavior_dataset import load_records
 from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features import t1
+from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
 from synthaea_ml.registry.training_record import (
     RobustnessCard,
     dataset_version_from_manifest,
     write_training_record,
 )
+from synthaea_ml.training.config import BEHAVIOR_FOREST, CALIBRATION, RANDOM_SEED
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_behavior.py"
-MODEL_FILENAME = "model.onnx"
-METADATA_FILENAME = "model_metadata.json"
-
-# Same calibration contract as the T0 trainers (issue #46).
-FP_BUDGET_PER_ENDPOINT_DAY = 5.0
-BENIGN_RATE_PER_DAY = 1000.0
-FEATURE_BOUNDS_MARGIN = 0.05
-
-# Provisional: the T0 value, to be settled on the first real capture (a process's
-# behavior counts are tightly clustered, so a lower contamination may separate better,
-# as `train_correlation.py` anticipates). Do not tune on the synthetic test corpus.
-HYPERPARAMETERS: dict[str, object] = {
-    "n_estimators": 100,
-    "contamination": 0.05,
-    "random_state": 42,
-}
 
 MIN_SAMPLES = 20
 """Fewer distinct incarnations than this cannot support a 70/30 split and a conformal
@@ -132,23 +118,25 @@ def main() -> None:
     ]
 
     X = load_matrix(args.dataset)
-    X_train, X_cal = train_test_split(X, test_size=0.3, random_state=42)
+    X_train, X_cal = train_test_split(X, test_size=0.3, random_state=RANDOM_SEED)
     print(f"Split: {len(X_train)} training, {len(X_cal)} calibration")
 
-    clf = IsolationForest(**HYPERPARAMETERS)
+    clf = IsolationForest(**BEHAVIOR_FOREST.hyperparameters())
     clf.fit(X_train)
 
     conformal_cal = calibrate_threshold(
         clf,
         X_cal,
-        fp_budget=FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=BENIGN_RATE_PER_DAY,
+        fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     )
     print(
         f"Conformal calibration: threshold={conformal_cal.threshold:.4f} "
-        f"for <={FP_BUDGET_PER_ENDPOINT_DAY} FP/endpoint/day"
+        f"for <={CALIBRATION.fp_budget_per_endpoint_day} FP/endpoint/day"
     )
-    bounds = compute_feature_bounds(X_train, list(t1.FEATURE_NAMES), margin=FEATURE_BOUNDS_MARGIN)
+    bounds = compute_feature_bounds(
+        X_train, list(t1.FEATURE_NAMES), margin=CALIBRATION.feature_bounds_margin
+    )
 
     onnx_model = to_onnx(clf, X_train[:1], target_opset={"": 18, "ai.onnx.ml": 3})
     (args.output_dir / MODEL_FILENAME).write_bytes(onnx_model.SerializeToString())
@@ -170,7 +158,7 @@ def main() -> None:
             model=clf,
             scenario_yaml=scenario_path,
             tier="T1",
-            mutation_seed=42,
+            mutation_seed=RANDOM_SEED,
             events_source=args.robustness_events,
         )
         robustness_cards.append(card)
@@ -184,7 +172,7 @@ def main() -> None:
         training_script=TRAINING_SCRIPT,
         dataset_versions=dataset_versions,
         robustness_cards=robustness_cards,
-        hyperparameters=HYPERPARAMETERS,
+        hyperparameters=BEHAVIOR_FOREST.hyperparameters(),
         conformal_calibration=conformal_cal,
         feature_bounds=bounds,
     )

@@ -22,6 +22,7 @@ from sklearn.ensemble import IsolationForest
 from synthaea_ml.calibration import calibrate_threshold
 from synthaea_ml.evaluation.onnx_model import load_shipped_model
 from synthaea_ml.training import train_site_rarity as rare
+from synthaea_ml.training.config import CALIBRATION
 
 BEACON = sibling("scenarios", "scenarios", "beacon.yaml")
 pytestmark = needs("scenarios", "scenarios", "beacon.yaml")
@@ -117,8 +118,8 @@ def _candidate(withheld_fraction: float):
     x_rare = np.hstack([x_base, rarity_cols])
     forest = IsolationForest(n_estimators=100, random_state=42).fit(x_rare[:1400])
     cal = calibrate_threshold(
-        forest, x_rare[1400:1700], fp_budget=rare.FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=rare.BENIGN_RATE_PER_DAY,
+        forest, x_rare[1400:1700], fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     )
     return forest, cal, x_base[1700:]
 
@@ -126,8 +127,8 @@ def _candidate(withheld_fraction: float):
 def _global(tmp_path: Path, forest: IsolationForest, x_cal: np.ndarray):
     """The global model as shipped, its threshold calibrated on `x_cal` as `train_linux` does."""
     cal = calibrate_threshold(
-        forest, x_cal, fp_budget=rare.FP_BUDGET_PER_ENDPOINT_DAY,
-        benign_rate_per_day=rare.BENIGN_RATE_PER_DAY,
+        forest, x_cal, fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
+        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
     )
     return load_shipped_model(_export(tmp_path / "g", forest, cal.threshold))
 
