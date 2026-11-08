@@ -44,6 +44,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from synthaea_ml.hashing import sha256_file
+
 SCHEMA_VERSION = 1
 """Bumped only when a field changes in a way that breaks readers."""
 
@@ -96,16 +98,6 @@ def hash_hostname(hostname: str) -> str:
     if not hostname:
         raise ValueError("hostname must not be empty")
     return hashlib.sha256(hostname.encode("utf-8")).hexdigest()[:_HOST_ID_LEN]
-
-
-def _hash_file(path: Path) -> str:
-    """SHA-256 of a file's byte contents, hex-encoded. Streamed so large baselines
-    do not need to fit in memory."""
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def _count_samples(path: Path) -> int:
@@ -190,7 +182,7 @@ def write_manifest(
         capture_start=_isoformat_utc(capture_start),
         capture_end=_isoformat_utc(capture_end),
         sample_count=_count_samples(baseline_path),
-        sample_sha256=_hash_file(baseline_path),
+        sample_sha256=sha256_file(baseline_path),
         capturer_ref=capturer_ref,
         extra=dict(extra) if extra else {},
     )
@@ -266,7 +258,7 @@ def verify_manifest(
     if not baseline_path.exists():
         raise FileNotFoundError(f"baseline not found: {baseline_path}")
 
-    actual_sha = _hash_file(baseline_path)
+    actual_sha = sha256_file(baseline_path)
     if actual_sha != manifest.sample_sha256:
         raise ValueError(
             f"baseline hash mismatch: manifest={manifest.sample_sha256}, "

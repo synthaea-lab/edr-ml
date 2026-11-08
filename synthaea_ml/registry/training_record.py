@@ -42,7 +42,6 @@ landed (verified pre-ADR).
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -54,6 +53,7 @@ from synthaea_ml.data.manifest import (
     load_manifest,
     verify_manifest,
 )
+from synthaea_ml.hashing import sha256_file
 
 SCHEMA_VERSION = 3
 """Bumped only when a field changes in a way that breaks readers.
@@ -398,24 +398,6 @@ def compute_passed(
     return True
 
 
-# ── File-content hash helper ───────────────────────────────────────────────
-
-
-_HASH_CHUNK = 1 << 16  # 64 KiB, matches manifest.py's chunk size
-
-
-def _sha256_file(path: Path) -> str:
-    """Content hash of a file. Same shape as ``manifest._hash_file``, private
-    here to avoid a cross-module import for a five-line helper. The chunk
-    size matches so both scans read the same-sized pages when the OS is
-    already caching."""
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(_HASH_CHUNK), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 # ── Naming (unchanged) ──────────────────────────────────────────────────────
 
 
@@ -638,7 +620,7 @@ def verify_scenario_replay(
             f"scenario yaml {yaml_path} missing — cannot verify replay for "
             f"{replay.scenario_name!r}"
         )
-    current_hash = _sha256_file(yaml_path)
+    current_hash = sha256_file(yaml_path)
     if current_hash != replay.scenario_yaml_sha256:
         raise ValueError(
             f"scenario {replay.scenario_name!r} yaml hash mismatch: "
