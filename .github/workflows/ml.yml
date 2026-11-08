@@ -13,7 +13,12 @@ permissions:
 
 jobs:
   lint-test:
-    runs-on: ubuntu-latest
+    # Every OS developers train and test on.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     env:
       # Parity tests read the agent's Rust fixtures and the lab scenarios: lay out the
       # umbrella (ml/ + agent/ + lab/) and fail, not skip, if a sibling is missing.
@@ -22,6 +27,7 @@ jobs:
     defaults:
       run:
         working-directory: ml
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
