@@ -6,7 +6,6 @@ unless the semantic change is deliberate on both sides.
 """
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -14,8 +13,10 @@ np = pytest.importorskip("numpy")
 pytest.importorskip("onnx")
 
 from attribution_reference import attribute, load_forest
+from siblings import needs, sibling
 
-FIXTURES = Path(__file__).resolve().parents[2] / "crates" / "ml" / "tests" / "fixtures"
+FIXTURES = sibling("agent", "crates", "ml", "tests", "fixtures")
+pytestmark = needs("agent", "crates", "ml", "tests", "fixtures", "attribution_golden.json")
 TOL = 1e-9
 
 

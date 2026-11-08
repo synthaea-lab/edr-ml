@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from siblings import needs, sibling
 from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
@@ -22,7 +23,8 @@ from synthaea_ml.calibration import calibrate_threshold
 from synthaea_ml.evaluation.onnx_model import load_shipped_model
 from synthaea_ml.training import train_site_rarity as rare
 
-BEACON = Path(__file__).resolve().parents[2] / "lab" / "scenarios" / "beacon.yaml"
+BEACON = sibling("lab", "scenarios", "beacon.yaml")
+pytestmark = needs("lab", "scenarios", "beacon.yaml")
 ONNX_OPSET = {"": 18, "ai.onnx.ml": 3}
 
 

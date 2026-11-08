@@ -26,9 +26,12 @@ from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from attribution_reference import attribute, load_forest
 
-OUT_DIR = Path(__file__).resolve().parents[3] / "crates" / "ml" / "tests" / "fixtures"
+from synthaea_ml import siblings
+
+OUT_DIR = siblings.path("agent", "crates", "ml", "tests", "fixtures")
 N_FEATURES = 7
 
 rng = np.random.default_rng(42)
