@@ -75,7 +75,7 @@ max-complexity = 10
 "synthaea_ml/evaluation/mutations/lineage.py" = ["S108", "ARG002", "D102"]
 "synthaea_ml/evaluation/mutations/cmdline.py" = ["S108", "ARG002", "C901", "ERA001", "D102"]
 "synthaea_ml/evaluation/robustness.py" = ["S108", "ARG001", "C901", "PLR0912", "PLR0913"]
-"synthaea_ml/registry/training_record.py" = ["PLR0913"]
+"synthaea_ml/registry/codec.py" = ["PLR0913"]
 # Public functions, methods and classes still without a docstring (pydocstyle D1).
 "synthaea_ml/evaluation/onnx_model.py" = ["D102", "D107"]
 "synthaea_ml/features/cmdline.py" = ["D103"]
@@ -131,9 +131,3 @@ disable_error_code = ["no-any-return"]
 [[tool.mypy.overrides]]
 module = "synthaea_ml.training.train_site_model"
 disable_error_code = ["no-untyped-def", "no-untyped-call"]
-
-# The hand-written record decoder iterates `object` values; its `type: ignore`
-# comments name the wrong codes.
-[[tool.mypy.overrides]]
-module = "synthaea_ml.registry.training_record"
-disable_error_code = ["attr-defined", "unused-ignore"]

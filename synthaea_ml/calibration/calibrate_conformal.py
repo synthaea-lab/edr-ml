@@ -18,7 +18,7 @@ from sklearn.ensemble import IsolationForest
 
 # The result types are part of the model record schema, so the registry owns
 # them; they are re-exported here for callers of the calibration API.
-from synthaea_ml.registry.training_record import ConformalCalibration, FeatureBounds
+from synthaea_ml.registry.records import ConformalCalibration, FeatureBounds
 
 __all__ = [
     "ConformalCalibration",

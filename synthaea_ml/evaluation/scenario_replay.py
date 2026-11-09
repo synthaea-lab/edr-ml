@@ -28,7 +28,7 @@ from pathlib import Path
 import yaml
 
 from synthaea_ml.hashing import sha256_file
-from synthaea_ml.registry.training_record import (
+from synthaea_ml.registry.records import (
     Environment,
     ExpectedDetection,
     ObservedDetection,

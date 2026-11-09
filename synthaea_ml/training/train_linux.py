@@ -33,11 +33,9 @@ from sklearn.ensemble import IsolationForest
 from synthaea_ml.data.baselines import load_cmdlines, unique_in_order
 from synthaea_ml.features.cmdline import FEATURE_NAMES, extract_features
 from synthaea_ml.features.sanity_samples import LINUX_SANITY_SAMPLES
+from synthaea_ml.registry.codec import write_training_record
+from synthaea_ml.registry.dataset_binding import dataset_version_from_manifest
 from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
-from synthaea_ml.registry.training_record import (
-    dataset_version_from_manifest,
-    write_training_record,
-)
 from synthaea_ml.training.config import CALIBRATION, CMDLINE_FOREST
 from synthaea_ml.training.pipeline import (
     describe_card,

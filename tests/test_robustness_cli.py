@@ -9,6 +9,7 @@ from synthaea_ml.registry.training_record import (
     MutationTestResult,
     RobustnessCard,
     TrainingRecord,
+    record_to_dict,
 )
 
 
@@ -86,7 +87,7 @@ def test_verify_robustness_pass(tmp_path: Path, capsys) -> None:
 
     record = _create_test_record_with_robustness(escape_rate=0.08)
     record_path = model_dir / "model_record.json"
-    record_path.write_text(json.dumps(record.to_dict()), encoding="utf-8")
+    record_path.write_text(json.dumps(record_to_dict(record)), encoding="utf-8")
 
     result = verify_robustness(model_dir, max_escape_rate=0.15, max_median_degradation=0.20)
 
@@ -103,7 +104,7 @@ def test_verify_robustness_fail_escape_rate(tmp_path: Path, capsys) -> None:
 
     record = _create_test_record_with_robustness(escape_rate=0.20)
     record_path = model_dir / "model_record.json"
-    record_path.write_text(json.dumps(record.to_dict()), encoding="utf-8")
+    record_path.write_text(json.dumps(record_to_dict(record)), encoding="utf-8")
 
     result = verify_robustness(model_dir, max_escape_rate=0.15, max_median_degradation=0.20)
 
@@ -123,7 +124,7 @@ def test_verify_robustness_regression(tmp_path: Path, capsys) -> None:
     prev_dir.mkdir()
     prev_record = _create_test_record_with_robustness(escape_rate=0.08)
     (prev_dir / "model_record.json").write_text(
-        json.dumps(prev_record.to_dict()), encoding="utf-8"
+        json.dumps(record_to_dict(prev_record)), encoding="utf-8"
     )
 
     # Create current version (0.2.0) with 10% escape rate (2% increase, within threshold)
@@ -131,7 +132,7 @@ def test_verify_robustness_regression(tmp_path: Path, capsys) -> None:
     curr_dir.mkdir()
     curr_record = _create_test_record_with_robustness(escape_rate=0.10)
     (curr_dir / "model_record.json").write_text(
-        json.dumps(curr_record.to_dict()), encoding="utf-8"
+        json.dumps(record_to_dict(curr_record)), encoding="utf-8"
     )
 
     # Should pass (2% increase < 5% threshold)
@@ -152,7 +153,7 @@ def test_verify_robustness_regression_fail(tmp_path: Path, capsys) -> None:
     prev_dir.mkdir()
     prev_record = _create_test_record_with_robustness(escape_rate=0.08)
     (prev_dir / "model_record.json").write_text(
-        json.dumps(prev_record.to_dict()), encoding="utf-8"
+        json.dumps(record_to_dict(prev_record)), encoding="utf-8"
     )
 
     # Create current version with 20% escape rate (12% increase, exceeds threshold)
@@ -160,7 +161,7 @@ def test_verify_robustness_regression_fail(tmp_path: Path, capsys) -> None:
     curr_dir.mkdir()
     curr_record = _create_test_record_with_robustness(escape_rate=0.20)
     (curr_dir / "model_record.json").write_text(
-        json.dumps(curr_record.to_dict()), encoding="utf-8"
+        json.dumps(record_to_dict(curr_record)), encoding="utf-8"
     )
 
     # Should fail (12% increase > 5% threshold)

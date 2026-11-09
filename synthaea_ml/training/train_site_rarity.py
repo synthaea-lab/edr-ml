@@ -76,8 +76,9 @@ from synthaea_ml.evaluation.onnx_model import ShippedModel, load_shipped_model
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features import cmdline, rarity
 from synthaea_ml.hashing import sha256_file
+from synthaea_ml.registry.codec import write_training_record
 from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
-from synthaea_ml.registry.training_record import DatasetVersion, write_training_record
+from synthaea_ml.registry.records import DatasetVersion
 from synthaea_ml.training.config import (
     CALIBRATION,
     CMDLINE_FOREST,
