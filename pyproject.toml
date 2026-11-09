@@ -67,8 +67,7 @@ max-complexity = 10
 "synthaea_ml/data/manifest.py" = ["T201", "PLR0913", "D102"]
 "synthaea_ml/evaluation/robustness_cli.py" = ["T201", "C901", "PLR0912", "D103"]
 "synthaea_ml/training/train_site_rarity.py" = ["T201", "PLR0913"]
-# The global-model floor check unpickles a model the operator trained locally.
-"synthaea_ml/training/train_site_model.py" = ["T201", "S301", "D103"]
+"synthaea_ml/training/train_site_model.py" = ["T201"]
 # Paths such as /tmp/x.sh are command-line and event *data* here, never files opened.
 "synthaea_ml/features/combined.py" = ["S108", "SIM108"]
 "synthaea_ml/features/lineage.py" = ["S108"]
@@ -127,7 +126,3 @@ disable_error_code = ["arg-type"]
 [[tool.mypy.overrides]]
 module = "synthaea_ml.training.train_site_rarity"
 disable_error_code = ["no-any-return"]
-
-[[tool.mypy.overrides]]
-module = "synthaea_ml.training.train_site_model"
-disable_error_code = ["no-untyped-def", "no-untyped-call"]

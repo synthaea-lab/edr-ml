@@ -32,7 +32,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import pickle
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 from sklearn.ensemble import IsolationForest
@@ -48,9 +52,11 @@ from synthaea_ml.registry.dataset_binding import dataset_version_from_manifest
 from synthaea_ml.registry.layout import MODEL_FILENAME
 from synthaea_ml.registry.records import DatasetVersion
 from synthaea_ml.training.config import CMDLINE_FOREST, FLOOR_TOLERANCE, RANDOM_SEED
+from synthaea_ml.training.floor import CardComparison, Scorer
 from synthaea_ml.training.pipeline import export_onnx
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_site_model.py"
+MIN_COMBINED_SAMPLES = 10
 
 
 def load_global_baseline(baseline_dir: Path) -> list[str]:
@@ -95,74 +101,79 @@ def combine_corpora(global_corpus: list[str], site_corpus: list[str]) -> list[st
     return combined
 
 
-def run_global_floor_check(
-    site_model,
-    global_model_path: Path,
-    scenario_yaml: Path,
-) -> bool:
-    """Validate that site model meets global-model-floor on shared scenarios.
+def load_global_model(path: Path) -> Scorer:
+    """The global model the floor compares the site model with, unpickled from `path`.
 
-    Uses Issue #45's run_robustness_evaluation() to compare site model vs global model
-    on the shared scenario suite. Site model must have:
-    - Escape rate <= global model escape rate
-    - Median degradation <= global model median degradation
-
-    Returns True if floor check passes, False otherwise.
+    The pickle is a model the operator trained locally; it is never a downloaded artifact.
+    Loading the shipped `model.onnx` instead, as `train_site_rarity` does, is a separate change.
     """
-    import pickle
+    with path.open("rb") as f:
+        return cast(Scorer, pickle.load(f))  # noqa: S301 - the operator's own model, see above
 
-    # Load global model
-    with open(global_model_path, "rb") as f:
-        global_model = pickle.load(f)
 
-    # Run robustness evaluation on both models
-    print("\n=== Running global-model-floor check ===")
-    print("Evaluating global model...")
+def check_global_floor(site_model: Scorer, global_model: Scorer, scenario_yaml: Path) -> CardComparison:
+    """The site model's robustness on `scenario_yaml` against the global model's.
+
+    Both are evaluated with `run_robustness_evaluation` (#45) at tier T0 and the same mutation
+    seed. The site model holds the floor when neither its escape rate nor its median score
+    degradation exceeds the global model's plus `config.FLOOR_TOLERANCE`.
+    """
     global_card = run_robustness_evaluation(
         model=global_model,
         scenario_yaml=scenario_yaml,
         tier="T0",
         mutation_seed=RANDOM_SEED,
     )
-
-    print("Evaluating site model...")
     site_card = run_robustness_evaluation(
         model=site_model,
         scenario_yaml=scenario_yaml,
         tier="T0",
         mutation_seed=RANDOM_SEED,
     )
-
-    # Compare metrics
-    print(f"\nGlobal model: escape_rate={global_card.escape_rate:.2%}, median_degradation={global_card.median_score_degradation:.3f}")
-    print(f"Site model:   escape_rate={site_card.escape_rate:.2%}, median_degradation={site_card.median_score_degradation:.3f}")
-
-    # Floor check: site model must not regress vs global
-    escape_ok = site_card.escape_rate <= global_card.escape_rate + FLOOR_TOLERANCE.escape_rate
-    degradation_ok = (
-        site_card.median_score_degradation
-        <= global_card.median_score_degradation + FLOOR_TOLERANCE.median_degradation
-    )
-
-    if escape_ok and degradation_ok:
-        print("✅ Global-model-floor check PASSED")
-        return True
-    else:
-        print("❌ Global-model-floor check FAILED")
-        if not escape_ok:
-            print(
-                f"   - Escape rate regression: {site_card.escape_rate:.2%} > "
-                f"{global_card.escape_rate:.2%} + {FLOOR_TOLERANCE.escape_rate:.0%}"
-            )
-        if not degradation_ok:
-            print(
-                f"   - Median degradation regression: {site_card.median_score_degradation:.3f} > "
-                f"{global_card.median_score_degradation:.3f} + {FLOOR_TOLERANCE.median_degradation:.2f}"
-            )
-        return False
+    return CardComparison(candidate=site_card, reference=global_card)
 
 
-def main():
+def describe_global_floor(floor: CardComparison) -> list[str]:
+    """The report lines of a global-model floor check: both models' metrics, the verdict, and
+    each regression that failed it."""
+    site, global_ = floor.candidate, floor.reference
+    lines = [
+        "",
+        f"Global model: escape_rate={global_.escape_rate:.2%}, "
+        f"median_degradation={global_.median_score_degradation:.3f}",
+        f"Site model:   escape_rate={site.escape_rate:.2%}, "
+        f"median_degradation={site.median_score_degradation:.3f}",
+    ]
+    if floor.passed:
+        return [*lines, "Global-model-floor check PASSED"]
+    lines.append("Global-model-floor check FAILED")
+    if floor.escape_rate_regressed:
+        lines.append(
+            f"   - Escape rate regression: {site.escape_rate:.2%} > "
+            f"{global_.escape_rate:.2%} + {FLOOR_TOLERANCE.escape_rate:.0%}"
+        )
+    if floor.median_degradation_regressed:
+        lines.append(
+            f"   - Median degradation regression: {site.median_score_degradation:.3f} > "
+            f"{global_.median_score_degradation:.3f} + {FLOOR_TOLERANCE.median_degradation:.2f}"
+        )
+    return lines
+
+
+@dataclass(frozen=True)
+class SiteModelArgs:
+    """The parsed command line of a run."""
+
+    global_dataset: Path
+    site_corpus: Path
+    output_dir: Path
+    site_name: str
+    robustness_scenarios: Path | None
+    global_model: Path | None
+
+
+def parse_args(argv: Sequence[str] | None = None) -> SiteModelArgs:
+    """The run's options from `argv` (the process's arguments when `None`)."""
     parser = argparse.ArgumentParser(description="Train site-specific Isolation Forest model")
     parser.add_argument("--global-dataset", type=Path, required=True,
                         help="Global baseline directory (e.g., ml/datasets/baselines/linux__dev__abc__2026-09-11/)")
@@ -176,68 +187,89 @@ def main():
                         help="Scenario YAML for global-model-floor check (optional)")
     parser.add_argument("--global-model", type=Path, default=None,
                         help="Path to global model .pkl for floor check (optional)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    return SiteModelArgs(
+        global_dataset=args.global_dataset,
+        site_corpus=args.site_corpus,
+        output_dir=args.output_dir,
+        site_name=args.site_name,
+        robustness_scenarios=args.robustness_scenarios,
+        global_model=args.global_model,
+    )
 
-    # Load corpora
+
+def train_site_forest(combined: list[str]) -> tuple[IsolationForest, np.ndarray]:
+    """The forest fitted on the cmdline features of `combined`, and its feature matrix."""
+    if len(combined) < MIN_COMBINED_SAMPLES:
+        raise ValueError(
+            f"Combined corpus has only {len(combined)} samples - need at least {MIN_COMBINED_SAMPLES}"
+        )
+    print("\n=== Extracting features ===")
+    X = np.array([extract_features(cmdline) for cmdline in combined], dtype=np.float32)
+    print(f"Feature matrix: {X.shape}")
+
+    print("\n=== Training Isolation Forest ===")
+    clf = IsolationForest(**CMDLINE_FOREST.hyperparameters())
+    clf.fit(X)
+    print(f"Trained on {len(combined)} samples")
+    return clf, X
+
+
+def enforce_global_floor(args: SiteModelArgs, site_model: IsolationForest) -> None:
+    """Run the global-model floor when both of its inputs are given and raise if it fails; warn
+    and skip it when only one is."""
+    if args.robustness_scenarios and args.global_model:
+        print("\n=== Running global-model-floor check ===")
+        floor = check_global_floor(
+            site_model, load_global_model(args.global_model), args.robustness_scenarios
+        )
+        print("\n".join(describe_global_floor(floor)))
+        if not floor.passed:
+            raise ValueError("Global-model-floor check failed - site model does not meet baseline quality")
+    elif args.robustness_scenarios or args.global_model:
+        print("Warning: Skipping global-model-floor check (need both --robustness-scenarios and --global-model)")
+
+
+def site_dataset_versions(args: SiteModelArgs, site_sample_count: int) -> list[DatasetVersion]:
+    """The record's dataset versions: the global baseline's manifest, then the site corpus."""
+    return [
+        dataset_version_from_manifest(args.global_dataset),
+        DatasetVersion(
+            name=f"site-corpus-{args.site_name}",
+            baseline_sha256=sha256_file(args.site_corpus),
+            sample_count=site_sample_count,
+        ),
+    ]
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    """Train, floor-check, export and record a site model from the command line `argv`."""
+    args = parse_args(argv)
+
     print("=== Loading corpora ===")
     global_corpus = load_global_baseline(args.global_dataset)
     site_corpus = load_site_corpus(args.site_corpus)
     combined = combine_corpora(global_corpus, site_corpus)
 
-    if len(combined) < 10:
-        raise ValueError(f"Combined corpus has only {len(combined)} samples - need at least 10")
+    clf, X = train_site_forest(combined)
+    enforce_global_floor(args, clf)
 
-    # Extract features
-    print("\n=== Extracting features ===")
-    X = np.array([extract_features(cmdline) for cmdline in combined], dtype=np.float32)
-    print(f"Feature matrix: {X.shape}")
-
-    # Train model
-    print("\n=== Training Isolation Forest ===")
-    clf = IsolationForest(**CMDLINE_FOREST.hyperparameters())
-    clf.fit(X)
-    print(f"Trained on {len(combined)} samples")
-
-    # Global-model-floor check (if requested)
-    if args.robustness_scenarios and args.global_model:
-        floor_passed = run_global_floor_check(
-            site_model=clf,
-            global_model_path=args.global_model,
-            scenario_yaml=args.robustness_scenarios,
-        )
-        if not floor_passed:
-            raise ValueError("Global-model-floor check failed - site model does not meet baseline quality")
-    elif args.robustness_scenarios or args.global_model:
-        print("⚠️  Warning: Skipping global-model-floor check (need both --robustness-scenarios and --global-model)")
-
-    # Export to ONNX
     print("\n=== Exporting to ONNX ===")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     onnx_path = args.output_dir / MODEL_FILENAME
     export_onnx(clf, X, onnx_path)
     print(f"Exported: {onnx_path}")
 
-    # Write training record with provenance
     print("\n=== Writing training record ===")
-    dataset_versions = [dataset_version_from_manifest(args.global_dataset)]
-
-    # Add site corpus as dataset version
-    site_corpus_version = DatasetVersion(
-        name=f"site-corpus-{args.site_name}",
-        baseline_sha256=sha256_file(args.site_corpus),
-        sample_count=len(site_corpus),
-    )
-    dataset_versions.append(site_corpus_version)
-
     write_training_record(
         args.output_dir,
         training_script=TRAINING_SCRIPT,
-        dataset_versions=dataset_versions,
+        dataset_versions=site_dataset_versions(args, len(site_corpus)),
         robustness_cards=[],  # Populated by separate robustness evaluation run
         scenario_replays=[],
     )
 
-    print(f"\n✅ Site model training complete: {args.output_dir}")
+    print(f"\nSite model training complete: {args.output_dir}")
     print(f"   Global corpus: {len(global_corpus)} samples")
     print(f"   Site corpus: {len(site_corpus)} samples")
     print(f"   Combined: {len(combined)} samples")

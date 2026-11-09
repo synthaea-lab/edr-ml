@@ -28,7 +28,7 @@ run also measures, on the same test slice with the rarity forced to withheld:
 - with `--robustness-scenarios`, the escape rate and median degradation of the adversarial
   scenario suite, scoring the candidate with the rarity withheld against the cmdline-only model
   of the same corpus, each at its own calibrated threshold, with the tolerances of
-  `train_site_model.py`'s floor check (`config.FLOOR_TOLERANCE`).
+  `train_site_model.py`'s floor check (`training.floor`, `config.FLOOR_TOLERANCE`).
 
 With `--global-model-dir` (the shipped `model.onnx`, and `model_metadata.json` for its
 threshold, scored through onnxruntime as the agent does) the same two checks are made against
@@ -60,7 +60,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -86,6 +86,7 @@ from synthaea_ml.training.config import (
     FLOOR_TOLERANCE,
     RANDOM_SEED,
 )
+from synthaea_ml.training.floor import CardComparison, Scorer
 from synthaea_ml.training.pipeline import (
     CalibratedForest,
     export_onnx,
@@ -157,14 +158,6 @@ def time_split(n: int) -> tuple[slice, slice, slice]:
     a = int(n * TRAIN_FRACTION)
     b = int(n * (TRAIN_FRACTION + CALIBRATION_FRACTION))
     return slice(0, a), slice(a, b), slice(b, n)
-
-
-class Scorer(Protocol):
-    """What the floor checks score with: an isolation forest, or the shipped ONNX model."""
-
-    def decision_function(self, x: ArrayLike) -> np.ndarray:
-        """The anomaly score of each row of `x`; lower is more anomalous."""
-        ...
 
 
 def flag_rate(scores: np.ndarray, threshold: float) -> float:
@@ -276,15 +269,13 @@ def compare_on_scenarios(
             f"({reference_name}), median degradation {cand_card.median_score_degradation:.3f} vs "
             f"{ref_card.median_score_degradation:.3f}"
         )
-        if cand_card.escape_rate > ref_card.escape_rate + FLOOR_TOLERANCE.escape_rate:
+        comparison = CardComparison(candidate=cand_card, reference=ref_card)
+        if comparison.escape_rate_regressed:
             failures.append(
                 f"{name}: escape rate {cand_card.escape_rate:.2%} is above the {reference_name}'s "
                 f"{ref_card.escape_rate:.2%} + {FLOOR_TOLERANCE.escape_rate:.0%}"
             )
-        if (
-            cand_card.median_score_degradation
-            > ref_card.median_score_degradation + FLOOR_TOLERANCE.median_degradation
-        ):
+        if comparison.median_degradation_regressed:
             failures.append(
                 f"{name}: median degradation {cand_card.median_score_degradation:.3f} is above "
                 f"the {reference_name}'s {ref_card.median_score_degradation:.3f} + "
