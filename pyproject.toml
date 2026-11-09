@@ -69,9 +69,6 @@ max-complexity = 10
 "synthaea_ml/training/train_site_rarity.py" = ["T201", "PLR0913", "D101", "D102", "D103", "D107"]
 # The global-model floor check unpickles a model the operator trained locally.
 "synthaea_ml/training/train_site_model.py" = ["T201", "S301", "D103"]
-# Self-tests under `if __name__ == "__main__"` that mirror the Rust unit tests.
-"synthaea_ml/features/behavior.py" = ["S101", "T201"]
-"synthaea_ml/features/correlation.py" = ["S101", "T201"]
 # Paths such as /tmp/x.sh are command-line and event *data* here, never files opened.
 "synthaea_ml/features/combined.py" = ["S108", "SIM108"]
 "synthaea_ml/features/lineage.py" = ["S108"]
