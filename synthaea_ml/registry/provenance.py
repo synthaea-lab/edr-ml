@@ -11,6 +11,7 @@ from pathlib import Path
 
 from synthaea_ml.data.manifest import (
     BEHAVIOR_CAPTURE_FILENAME,
+    CORRELATION_DATASET_FILENAME,
     DEFAULT_BASELINE_FILENAME,
     load_manifest,
     verify_manifest,
@@ -100,17 +101,23 @@ def verify_dataset_version(dataset_version: DatasetVersion, baselines_root: Path
 
 def _baseline_filename(baseline_dir: Path) -> str:
     """The samples file inside ``baseline_dir``. A T1 behavior dataset is a raw agent
-    capture named ``events.jsonl`` (#617); every other dataset is ``baseline.jsonl``.
+    capture named ``events.jsonl`` (#617), a correlation-scorer dataset is
+    ``correlation_train.jsonl``; every other dataset is ``baseline.jsonl``.
 
     Raises:
         FileNotFoundError: If neither file is present.
     """
-    for filename in (DEFAULT_BASELINE_FILENAME, BEHAVIOR_CAPTURE_FILENAME):
+    candidates = (
+        DEFAULT_BASELINE_FILENAME,
+        BEHAVIOR_CAPTURE_FILENAME,
+        CORRELATION_DATASET_FILENAME,
+    )
+    for filename in candidates:
         if (baseline_dir / filename).exists():
             return filename
     raise FileNotFoundError(
-        f"baseline missing inside {baseline_dir}: expected {DEFAULT_BASELINE_FILENAME} "
-        f"or {BEHAVIOR_CAPTURE_FILENAME}"
+        f"baseline missing inside {baseline_dir}: expected {DEFAULT_BASELINE_FILENAME}, "
+        f"{BEHAVIOR_CAPTURE_FILENAME} or {CORRELATION_DATASET_FILENAME}"
     )
 
 

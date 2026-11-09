@@ -17,8 +17,14 @@ Output: JSON-Lines, one `{"pid", "features": [...], "feature_names": [...]}` obj
 
 Usage (from the repository root):
     python -m synthaea_ml.data.aggregate_correlation \
-        [--events events.jsonl] [--out synthaea_ml/training/data/correlation_train.jsonl]
+        [--events events.jsonl] --out <dataset-dir>/correlation_train.jsonl
         [--window 60] [--min-events 1]
+
+then `python -m synthaea_ml.data.manifest write --baseline-filename correlation_train.jsonl
+...` in `<dataset-dir>` and train with `train_correlation --dataset <dataset-dir>`.
+
+Without `--out`, the vectors go to `LEGACY_OUT_PATH` inside the package, where
+`train_correlation` run without options reads them. That default is deprecated.
 """
 
 from __future__ import annotations
@@ -26,17 +32,30 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
+from synthaea_ml.data.manifest import CORRELATION_DATASET_FILENAME
 from synthaea_ml.data.wire import RAW_EVENT_TYPES, flatten_wire_event
 from synthaea_ml.features.correlation import FEATURE_NAMES, extract_features
 
 # Re-exported: callers imported the wire translator from here before `data/wire.py`.
-__all__ = ["RAW_EVENT_TYPES", "charger_events", "flatten_wire_event", "main", "vecteurs_par_pid"]
+__all__ = [
+    "LEGACY_OUT_PATH",
+    "RAW_EVENT_TYPES",
+    "charger_events",
+    "flatten_wire_event",
+    "main",
+    "vecteurs_par_pid",
+]
+
+LEGACY_OUT_PATH = Path(__file__).parents[1] / "training" / "data" / CORRELATION_DATASET_FILENAME
+"""Where the vectors go without `--out`, and where `train_correlation` run without options
+reads them. Deprecated: it lies inside the package source tree."""
 
 
 def charger_events(path: Path) -> list[dict]:
@@ -95,7 +114,11 @@ def parse_args(argv: Sequence[str] | None = None) -> AggregateCorrelationArgs:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(__file__).parent / "data" / "correlation_train.jsonl",
+        help=(
+            f"vectors file to write, normally <dataset-dir>/{CORRELATION_DATASET_FILENAME} "
+            "(deprecated default: inside the package, where train_correlation without "
+            "options reads it)"
+        ),
     )
     parser.add_argument(
         "--window",
@@ -110,8 +133,18 @@ def parse_args(argv: Sequence[str] | None = None) -> AggregateCorrelationArgs:
         help="skip PIDs with fewer than N events in the window",
     )
     args = parser.parse_args(argv)
+    out = args.out
+    if out is None:
+        warnings.warn(
+            f"aggregate_correlation without --out writes into the package ({LEGACY_OUT_PATH}); "
+            f"pass --out <dataset-dir>/{CORRELATION_DATASET_FILENAME}. The default will be "
+            "removed in the next release.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        out = LEGACY_OUT_PATH
     return AggregateCorrelationArgs(
-        events=args.events, out=args.out, window_s=args.window, min_events=args.min_events
+        events=args.events, out=out, window_s=args.window, min_events=args.min_events
     )
 
 
