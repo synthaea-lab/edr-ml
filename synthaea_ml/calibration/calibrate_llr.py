@@ -28,20 +28,110 @@ from synthaea_ml.features.behavior import extract_behavior_features
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-FEATURE_NAMES = [
-    "has_exec",
-    "has_connect",
-    "has_filewrite",
-    "time_exec_to_connect_ms",
-    "time_exec_to_filewrite_ms",
-    "is_suspicious_path",
-    "connect_count",
-    "distinct_dports",
-    "dest_is_external",
-]
+
+@dataclass(frozen=True)
+class BinSpec:
+    """How one behavior feature is binned: the single source of both the discretizer
+    that counts the empirical bins and the Rust match arm generated from their LLRs.
+
+    A feature without `edges` is binary: "1" above 0.5, "0" otherwise. Otherwise 0.0
+    maps to `absent` or `zero` (when set), then a value takes the label of the first
+    edge it falls under (`value <= edge` when `inclusive`, `value < edge` otherwise),
+    and `overflow` past the last edge.
+
+    `absent` marks 0.0 as "never happened": in Rust every edge arm is guarded by
+    `value > 0.0` and the else arm returns the absent LLR, so values past the last
+    edge share it too (the `overflow` LLR is reported but not emitted). `zero` is an
+    ordinary first bin, tested first in Rust.
+    """
+
+    name: str
+    current_llr: str
+    """The hand-calibrated LLR, shown in the report for comparison."""
+    edges: tuple[tuple[float, str], ...] = ()
+    absent: str | None = None
+    zero: str | None = None
+    overflow: str = ""
+    inclusive: bool = False
+    multiline: bool = False
+    """Lay the generated Rust arm out as a block, one branch per line."""
+
+    @property
+    def labels(self) -> tuple[str, ...]:
+        """Every bin label `discretize` can return."""
+        if not self.edges:
+            return ("0", "1")
+        first = tuple(z for z in (self.absent, self.zero) if z is not None)
+        return (*first, *(label for _, label in self.edges), self.overflow)
+
+    def discretize(self, value: float) -> str:
+        """The bin label of `value`."""
+        if not self.edges:
+            return "1" if value > 0.5 else "0"
+        zero = self.absent if self.absent is not None else self.zero
+        if zero is not None and value == 0.0:
+            return zero
+        for edge, label in self.edges:
+            if (value <= edge) if self.inclusive else (value < edge):
+                return label
+        return self.overflow
+
+    def rust_branches(self) -> tuple[list[tuple[str, str]], str]:
+        """The Rust `if` conditions in order with the bin each returns, and the bin of
+        the final `else`."""
+        op = "<=" if self.inclusive else "<"
+        guard = "value > 0.0 && " if self.absent is not None else ""
+        branches = [(f"{guard}value {op} {edge:.1f}", label) for edge, label in self.edges]
+        if self.absent is not None:
+            return branches, self.absent
+        if self.zero is not None:
+            branches.insert(0, ("value == 0.0", self.zero))
+        return branches, self.overflow
+
+
+BIN_SPECS: tuple[BinSpec, ...] = (
+    BinSpec("has_exec", current_llr="0.0"),
+    BinSpec("has_connect", current_llr="0.3"),
+    BinSpec("has_filewrite", current_llr="0.7"),
+    BinSpec(
+        "time_exec_to_connect_ms",
+        current_llr="0.8/<500ms,0.3/<2s",
+        edges=((500.0, "<500"), (2000.0, "<2000")),
+        absent="absent",
+        overflow=">=2000",
+        multiline=True,
+    ),
+    BinSpec(
+        "time_exec_to_filewrite_ms",
+        current_llr="0.6",
+        edges=((500.0, "<500"),),
+        absent="absent",
+        overflow=">=500",
+    ),
+    BinSpec("is_suspicious_path", current_llr="2.0"),
+    BinSpec(
+        "connect_count",
+        current_llr="0.1*n,max1.5",
+        edges=((5.0, "1-4"), (15.0, "5-14")),
+        zero="0",
+        overflow=">=15",
+        multiline=True,
+    ),
+    BinSpec(
+        "distinct_dports",
+        current_llr="0.5",
+        edges=((1.0, "0-1"), (3.0, "2-3")),
+        overflow=">=4",
+        inclusive=True,
+    ),
+    BinSpec("dest_is_external", current_llr="1.5"),
+)
+"""One spec per BehaviorVector feature, in vector order."""
+
+FEATURE_NAMES = [spec.name for spec in BIN_SPECS]
 
 # Hand-calibrated LLRs — kept as reference for comparison in the report.
-LLR_CURRENT = [0.0, 0.3, 0.7, "0.8/<500ms,0.3/<2s", 0.6, 2.0, "0.1*n,max1.5", 0.5, 1.5]
+LLR_CURRENT = [spec.current_llr for spec in BIN_SPECS]
 
 # Laplace smoothing — prevents log(0) when a bin is unseen in a small sample.
 LAPLACE_ALPHA = 0.5
@@ -133,45 +223,10 @@ def group_by_pid_and_window(
 
 
 def _discretize(feature_idx: int, value: float) -> str:
-    """Discretize a continuous feature value into a named bin.
-
-    Binary features (0.0/1.0) pass through as "0"/"1".
-    Continuous features are split into empirically chosen intervals.
-    """
-    if feature_idx in (0, 1, 2, 5, 8):
-        return "1" if value > 0.5 else "0"
-    elif feature_idx == 3:  # time_exec_to_connect_ms
-        if value == 0.0:
-            return "absent"
-        elif value < 500:
-            return "<500"
-        elif value < 2000:
-            return "<2000"
-        else:
-            return ">=2000"
-    elif feature_idx == 4:  # time_exec_to_filewrite_ms
-        if value == 0.0:
-            return "absent"
-        elif value < 500:
-            return "<500"
-        else:
-            return ">=500"
-    elif feature_idx == 6:  # connect_count
-        if value == 0:
-            return "0"
-        elif value < 5:
-            return "1-4"
-        elif value < 15:
-            return "5-14"
-        else:
-            return ">=15"
-    elif feature_idx == 7:  # distinct_dports
-        if value <= 1:
-            return "0-1"
-        elif value <= 3:
-            return "2-3"
-        else:
-            return ">=4"
+    """Discretize a feature value into its named bin (see `BIN_SPECS`); a value past the
+    known features is named by its own text."""
+    if 0 <= feature_idx < len(BIN_SPECS):
+        return BIN_SPECS[feature_idx].discretize(value)
     return str(value)
 
 
@@ -209,7 +264,7 @@ def compute_empirical_llrs(
         return {}
 
     llr: dict[int, dict[str, float]] = {}
-    for i in range(9):
+    for i in range(len(BIN_SPECS)):
         all_bins = set(benign[i].keys()) | set(malicious[i].keys())
         total_b = sum(benign[i].values()) + alpha * len(all_bins)
         total_m = sum(malicious[i].values()) + alpha * len(all_bins)
@@ -259,73 +314,40 @@ def generate_report(
 def generate_rust(llr: dict[int, dict[str, float]]) -> str:
     """Generate the Rust match block for log_likelihood_ratio()."""
     rust = ["fn log_likelihood_ratio(idx: usize, value: f32) -> f32 {", "    match idx {"]
-
-    descs = {
-        0: "has_exec",
-        1: "has_connect",
-        2: "has_filewrite",
-        3: "time_exec_to_connect_ms",
-        4: "time_exec_to_filewrite_ms",
-        5: "is_suspicious_path",
-        6: "connect_count",
-        7: "distinct_dports",
-        8: "dest_is_external",
-    }
-
-    for i in range(9):
-        rust.append(f"        // {i} — {descs[i]}")
-        if i not in llr:
-            rust.append(f"        {i} => 0.0,")
-            continue
-
-        bins = llr[i]
-        if set(bins.keys()) <= {"0", "1"}:
-            llr_1 = bins.get("1", 0.0)
-            llr_0 = bins.get("0", 0.0)
-            rust.append(f"        {i} => if value > 0.5 {{ {llr_1:.2f} }} else {{ {llr_0:.2f} }},")
-        elif i == 3:
-            v_lt500 = bins.get("<500", 0.0)
-            v_lt2000 = bins.get("<2000", 0.0)
-            v_absent = bins.get("absent", 0.0)
-            rust.append(f"        {i} => {{")
-            rust.append(f"            if value > 0.0 && value < 500.0 {{ {v_lt500:.2f} }}")
-            rust.append(f"            else if value > 0.0 && value < 2000.0 {{ {v_lt2000:.2f} }}")
-            rust.append(f"            else {{ {v_absent:.2f} }}")
-            rust.append("        }")
-        elif i == 4:
-            v_lt500 = bins.get("<500", 0.0)
-            v_absent = bins.get("absent", 0.0)
-            rust.append(
-                f"        {i} => if value > 0.0 && value < 500.0 "
-                f"{{ {v_lt500:.2f} }} else {{ {v_absent:.2f} }},"
-            )
-        elif i == 6:
-            v_0 = bins.get("0", 0.0)
-            v_1_4 = bins.get("1-4", 0.0)
-            v_5_14 = bins.get("5-14", 0.0)
-            v_gte = bins.get(">=15", 0.0)
-            rust.append(f"        {i} => {{")
-            rust.append(f"            if value == 0.0 {{ {v_0:.2f} }}")
-            rust.append(f"            else if value < 5.0 {{ {v_1_4:.2f} }}")
-            rust.append(f"            else if value < 15.0 {{ {v_5_14:.2f} }}")
-            rust.append(f"            else {{ {v_gte:.2f} }}")
-            rust.append("        }")
-        elif i == 7:
-            v_01 = bins.get("0-1", 0.0)
-            v_23 = bins.get("2-3", 0.0)
-            v_gte = bins.get(">=4", 0.0)
-            rust.append(
-                f"        {i} => if value <= 1.0 {{ {v_01:.2f} }} "
-                f"else if value <= 3.0 {{ {v_23:.2f} }} else {{ {v_gte:.2f} }},"
-            )
+    for i, spec in enumerate(BIN_SPECS):
+        rust.append(f"        // {i} — {spec.name}")
+        if i in llr:
+            rust.extend(_rust_arm(i, spec, llr[i]))
         else:
-            val = bins.get("1", 0.0)
-            rust.append(f"        {i} => {val:.2f},")
-
+            rust.append(f"        {i} => 0.0,")
     rust.append("        _ => 0.0,")
     rust.append("    }")
     rust.append("}")
     return "\n".join(rust)
+
+
+def _rust_arm(idx: int, spec: BinSpec, bins: dict[str, float]) -> list[str]:
+    """The match arm of feature `idx`, returning the LLR of the bin `value` falls in (0.0
+    for a bin the calibration never saw)."""
+    if set(bins) <= {"0", "1"}:
+        # Only the binary bins were seen, whatever the feature: test it as a flag.
+        return [
+            f"        {idx} => if value > 0.5 {{ {bins.get('1', 0.0):.2f} }} "
+            f"else {{ {bins.get('0', 0.0):.2f} }},"
+        ]
+    if not spec.edges:
+        return [f"        {idx} => {bins.get('1', 0.0):.2f},"]
+    conditions, else_label = spec.rust_branches()
+    branches = [f"if {cond} {{ {bins.get(label, 0.0):.2f} }}" for cond, label in conditions]
+    branches.append(f"{{ {bins.get(else_label, 0.0):.2f} }}")
+    if spec.multiline:
+        return [
+            f"        {idx} => {{",
+            f"            {branches[0]}",
+            *(f"            else {branch}" for branch in branches[1:]),
+            "        }",
+        ]
+    return [f"        {idx} => {' else '.join(branches)},"]
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────

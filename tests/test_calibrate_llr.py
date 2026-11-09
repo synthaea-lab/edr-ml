@@ -11,12 +11,15 @@ import math
 import pytest
 
 from synthaea_ml.calibration.calibrate_llr import (
+    BIN_SPECS,
     FEATURE_NAMES,
+    BinSpec,
     _discretize,
     compute_empirical_llrs,
     generate_report,
     generate_rust,
 )
+from synthaea_ml.features.behavior import extract_behavior_features
 
 # One LLR per bin the discretizer can produce, for every feature.
 FULL_LLR: dict[int, dict[str, float]] = {
@@ -228,3 +231,17 @@ def test_compute_empirical_llrs_uses_the_discretized_bins() -> None:
     assert set(llr[7]) == {"0-1", ">=4"}
     # Laplace alpha 0.5, two bins: p_m = 1.5/2, p_b = 0.5/3.
     assert llr[0]["1"] == pytest.approx(math.log((1.5 / 2) / (0.5 / 3)))
+
+
+@pytest.mark.parametrize("spec", BIN_SPECS, ids=lambda spec: spec.name)
+def test_bin_spec_codegen_only_names_bins_the_discretizer_produces(spec: BinSpec) -> None:
+    sweep = [-1.0, 0.0, 0.5, 1.0, 1.5, 3.0, 4.0, 5.0, 15.0, 499.0, 500.0, 2000.0, 1e9]
+    seen = {spec.discretize(v) for v in sweep}
+    assert seen <= set(spec.labels)
+    if spec.edges:
+        conditions, else_label = spec.rust_branches()
+        assert {label for _, label in conditions} | {else_label} <= set(spec.labels)
+
+
+def test_one_bin_spec_per_behavior_feature() -> None:
+    assert len(BIN_SPECS) == len(extract_behavior_features([]))
