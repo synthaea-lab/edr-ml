@@ -8,6 +8,7 @@ nothing about detection quality; that needs a real capture of normal activity.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -309,3 +310,17 @@ def test_train_behavior_runs_the_t1_robustness_tier_and_records_the_card(
     assert call["model"].n_features_in_ == 17
     (card,) = load_training_record(out).robustness_cards
     assert card.scenario_name == "beacon"
+
+
+def test_load_matrix_logs_its_counts_and_writes_nothing_to_stdout(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dataset = _write_dataset(tmp_path, _capture(40))
+
+    with caplog.at_level(logging.INFO, logger=train_behavior.__name__):
+        matrix = train_behavior.load_matrix([dataset])
+
+    assert [r.getMessage() for r in caplog.records if r.name == train_behavior.__name__] == [
+        f"Behavior capture: 40 process incarnations -> {len(matrix)} distinct vectors"
+    ]
+    assert capsys.readouterr().out == ""

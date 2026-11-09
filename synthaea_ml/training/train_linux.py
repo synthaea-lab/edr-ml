@@ -25,11 +25,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
+from synthaea_ml.cli_logging import configure_cli_logging
 from synthaea_ml.data.baselines import load_cmdlines, unique_in_order
 from synthaea_ml.features.cmdline import FEATURE_NAMES, extract_features
 from synthaea_ml.features.sanity_samples import LINUX_SANITY_SAMPLES
@@ -45,6 +47,8 @@ from synthaea_ml.training.pipeline import (
     split_for_calibration,
     write_scorer_metadata,
 )
+
+logger = logging.getLogger(__name__)
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_linux.py"
 
@@ -62,7 +66,9 @@ def load_baseline(baseline_dir: Path) -> list[str]:
     """
     cmdlines = load_cmdlines(baseline_dir, "linux")
     unique = unique_in_order(cmdlines)
-    print(f"Baseline: {len(cmdlines)} entries -> {len(unique)} unique after deduplication")
+    logger.info(
+        "Baseline: %d entries -> %d unique after deduplication", len(cmdlines), len(unique)
+    )
     return unique
 
 
@@ -114,6 +120,7 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    configure_cli_logging()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 

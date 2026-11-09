@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -66,6 +67,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from sklearn.ensemble import IsolationForest
 
+from synthaea_ml.cli_logging import configure_cli_logging
 from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.common_set import (
     DEFAULT_INTERVAL_NS,
@@ -93,6 +95,8 @@ from synthaea_ml.training.pipeline import (
     fit_calibrated_forest,
     write_scorer_metadata,
 )
+
+logger = logging.getLogger(__name__)
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_site_rarity.py"
 FEATURE_NAMES = [*cmdline.FEATURE_NAMES, *rarity.FEATURE_NAMES]
@@ -556,7 +560,7 @@ def _load_matrices(args: SiteRarityArgs) -> SiteMatrices:
         raise ValueError(
             f"only {len(x_rare)} exec events in the corpus (need at least {MIN_ROWS})"
         )
-    print(f"{len(x_rare)} exec events; rarity known for {known:.0%} of them")
+    logger.info("%d exec events; rarity known for %.0f%% of them", len(x_rare), known * 100)
     return SiteMatrices(len(records), x_base, x_rare, known)
 
 
@@ -568,10 +572,12 @@ def _train_both(
     train_rows, _, _ = time_split(len(x_rare))
     x_fit = withhold_rows(x_rare, withhold_fraction, CMDLINE_FOREST.random_state, train_rows)
     candidate = fit_and_measure(x_fit, FEATURE_NAMES)
-    print(
-        f"test-slice false-positive rate: cmdline only {baseline.fp_rate_test:.2%}, "
-        f"with rarity {candidate.fp_rate_test:.2%} "
-        f"(budget {CALIBRATION.fp_budget_per_endpoint_day:g}/endpoint/day)"
+    logger.info(
+        "test-slice false-positive rate: cmdline only %.2f%%, with rarity %.2f%% "
+        "(budget %g/endpoint/day)",
+        baseline.fp_rate_test * 100,
+        candidate.fp_rate_test * 100,
+        CALIBRATION.fp_budget_per_endpoint_day,
     )
     return baseline, candidate
 
@@ -579,6 +585,7 @@ def _train_both(
 def main(argv: Sequence[str] | None = None) -> None:
     """Train, check the floors and, if they hold, write the site model with its record."""
     args = parse_args(argv)
+    configure_cli_logging()
     global_model = load_shipped_model(args.global_model_dir) if args.global_model_dir else None
 
     matrices = _load_matrices(args)

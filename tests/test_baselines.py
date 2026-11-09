@@ -2,13 +2,14 @@
 
 These pin the behavior the Linux, Windows and per-site trainers had when each one carried
 its own copy of the loop: file order is kept, blank lines are skipped, duplicates survive
-`load_cmdlines` (so the trainers can print the raw count) and `unique_in_order` keeps the
+`load_cmdlines` (so the trainers can log the raw count) and `unique_in_order` keeps the
 first occurrence. The trainers split and fit on this list, so order is part of the model.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -79,26 +80,42 @@ def test_missing_baseline_raises(tmp_path: Path, platform: str) -> None:
         load_cmdlines(tmp_path, platform)  # type: ignore[arg-type]
 
 
-def test_linux_trainer_dedupes_its_baseline(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def _info_messages(caplog: pytest.LogCaptureFixture, logger: str) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == logger and r.levelno == logging.INFO]
+
+
+def test_linux_trainer_dedupes_its_baseline_and_logs_the_counts(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
     baseline = _write_baseline(
         tmp_path,
         [json.dumps({"argv": a}) for a in (["id"], ["ls"], ["id"])],
     )
 
-    assert train_linux.load_baseline(baseline) == ["id\0", "ls\0"]
-    assert "Baseline: 3 entries -> 2 unique after deduplication" in capsys.readouterr().out
+    with caplog.at_level(logging.INFO, logger=train_linux.__name__):
+        assert train_linux.load_baseline(baseline) == ["id\0", "ls\0"]
+
+    assert _info_messages(caplog, train_linux.__name__) == [
+        "Baseline: 3 entries -> 2 unique after deduplication"
+    ]
+    assert capsys.readouterr().out == ""
 
 
-def test_windows_trainer_dedupes_its_baseline(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_windows_trainer_dedupes_its_baseline_and_logs_the_counts(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
 ) -> None:
     baseline = _write_baseline(
         tmp_path,
         [json.dumps({"cmdline": c}) for c in ("b.exe", "a.exe", "b.exe")],
     )
 
-    assert train_windows.load_baseline(baseline) == ["b.exe", "a.exe"]
-    assert "Baseline: 3 entries -> 2 unique after deduplication" in capsys.readouterr().out
+    with caplog.at_level(logging.INFO, logger=train_windows.__name__):
+        assert train_windows.load_baseline(baseline) == ["b.exe", "a.exe"]
+
+    assert _info_messages(caplog, train_windows.__name__) == [
+        "Baseline: 3 entries -> 2 unique after deduplication"
+    ]
+    assert capsys.readouterr().out == ""
 
 
 def test_site_global_baseline_keeps_its_own_missing_file_message(tmp_path: Path) -> None:
@@ -129,3 +146,27 @@ def test_combine_corpora_puts_global_first_and_dedupes_site_against_it() -> None
     combined = train_site_model.combine_corpora(["a", "b"], ["c", "a", "d", "c"])
 
     assert combined == ["a", "b", "c", "d"]
+
+
+def test_site_corpus_loaders_log_their_counts_and_write_nothing_to_stdout(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    baseline = _write_baseline(
+        tmp_path, [json.dumps({"argv": a}) for a in (["id"], ["ls"], ["id"])]
+    )
+    corpus = tmp_path / "corpus.jsonl"
+    corpus.write_text(
+        json.dumps({"event_type": "exec", "event": {"argv": ["cron"]}}) + "\n", encoding="utf-8"
+    )
+
+    with caplog.at_level(logging.INFO, logger=train_site_model.__name__):
+        global_corpus = train_site_model.load_global_baseline(baseline)
+        site_corpus = train_site_model.load_site_corpus(corpus)
+        train_site_model.combine_corpora(global_corpus, site_corpus)
+
+    assert _info_messages(caplog, train_site_model.__name__) == [
+        "Global baseline: 3 entries -> 2 unique",
+        "Site corpus: 1 entries -> 1 unique",
+        "Combined corpus: 3 unique samples (2 global + 1 site)",
+    ]
+    assert capsys.readouterr().out == ""

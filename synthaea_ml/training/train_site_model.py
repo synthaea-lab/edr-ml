@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import pickle
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -41,6 +42,7 @@ from typing import cast
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
+from synthaea_ml.cli_logging import configure_cli_logging
 from synthaea_ml.data.baselines import load_cmdlines, unique_in_order
 from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
@@ -55,6 +57,8 @@ from synthaea_ml.training.config import CMDLINE_FOREST, FLOOR_TOLERANCE, RANDOM_
 from synthaea_ml.training.floor import CardComparison, Scorer
 from synthaea_ml.training.pipeline import export_onnx
 
+logger = logging.getLogger(__name__)
+
 TRAINING_SCRIPT = "synthaea_ml/training/train_site_model.py"
 MIN_COMBINED_SAMPLES = 10
 
@@ -68,7 +72,7 @@ def load_global_baseline(baseline_dir: Path) -> list[str]:
     cmdlines = load_cmdlines(baseline_dir, "linux")
     unique = unique_in_order(cmdlines)
 
-    print(f"Global baseline: {len(cmdlines)} entries -> {len(unique)} unique")
+    logger.info("Global baseline: %d entries -> %d unique", len(cmdlines), len(unique))
     return unique
 
 
@@ -88,7 +92,7 @@ def load_site_corpus(corpus_path: Path) -> list[str]:
 
     unique = unique_in_order(cmdlines)
 
-    print(f"Site corpus: {len(cmdlines)} entries -> {len(unique)} unique")
+    logger.info("Site corpus: %d entries -> %d unique", len(cmdlines), len(unique))
     return unique
 
 
@@ -97,7 +101,10 @@ def combine_corpora(global_corpus: list[str], site_corpus: list[str]) -> list[st
     # Global samples first, then the site samples not already in it.
     combined = unique_in_order([*global_corpus, *site_corpus])
 
-    print(f"Combined corpus: {len(combined)} unique samples ({len(global_corpus)} global + {len(site_corpus)} site)")
+    logger.info(
+        "Combined corpus: %d unique samples (%d global + %d site)",
+        len(combined), len(global_corpus), len(site_corpus),
+    )
     return combined
 
 
@@ -204,14 +211,14 @@ def train_site_forest(combined: list[str]) -> tuple[IsolationForest, np.ndarray]
         raise ValueError(
             f"Combined corpus has only {len(combined)} samples - need at least {MIN_COMBINED_SAMPLES}"
         )
-    print("\n=== Extracting features ===")
+    logger.info("=== Extracting features ===")
     X = np.array([extract_features(cmdline) for cmdline in combined], dtype=np.float32)
-    print(f"Feature matrix: {X.shape}")
+    logger.info("Feature matrix: %s", X.shape)
 
-    print("\n=== Training Isolation Forest ===")
+    logger.info("=== Training Isolation Forest ===")
     clf = IsolationForest(**CMDLINE_FOREST.hyperparameters())
     clf.fit(X)
-    print(f"Trained on {len(combined)} samples")
+    logger.info("Trained on %d samples", len(combined))
     return clf, X
 
 
@@ -245,6 +252,7 @@ def site_dataset_versions(args: SiteModelArgs, site_sample_count: int) -> list[D
 def main(argv: Sequence[str] | None = None) -> None:
     """Train, floor-check, export and record a site model from the command line `argv`."""
     args = parse_args(argv)
+    configure_cli_logging()
 
     print("=== Loading corpora ===")
     global_corpus = load_global_baseline(args.global_dataset)
