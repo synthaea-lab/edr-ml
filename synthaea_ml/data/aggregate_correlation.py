@@ -29,6 +29,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
 from synthaea_ml.features.correlation import FEATURE_NAMES, extract_features
 
 # Wire tags as `crates/schema::Event` serializes them (serde `rename_all = "snake_case"`
@@ -76,19 +77,10 @@ def charger_events(path: Path) -> list[dict]:
     `flatten_wire_event` to the shape `correlation.py` expects."""
     events: list[dict] = []
     try:
-        with open(path, encoding="utf-8") as f:
-            for i, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    raw = json.loads(line)
-                except json.JSONDecodeError as exc:
-                    print(f"[warn] {path} line {i} invalid: {exc}", file=sys.stderr)
-                    continue
-                e = flatten_wire_event(raw)
-                if e is not None:
-                    events.append(e)
+        for raw in iter_jsonl(path, on_invalid=InvalidLine.WARN):
+            e = flatten_wire_event(raw)
+            if e is not None:
+                events.append(e)
     except FileNotFoundError:
         print(
             f"[error] {path} not found — run `edr-cli capture-events` first.",

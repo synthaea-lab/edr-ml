@@ -15,11 +15,11 @@ yields no record.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from synthaea_ml.data.aggregate_correlation import RAW_EVENT_TYPES, flatten_wire_event
+from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
 from synthaea_ml.features import correlation
 
 DEFAULT_WINDOW_NS = 60 * 1_000_000_000
@@ -33,15 +33,8 @@ def load_events(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         raise FileNotFoundError(f"capture not found: {path}")
     events: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            raw = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(raw, dict) and raw.get("type") in RAW_EVENT_TYPES:
+    for raw in iter_jsonl(path, on_invalid=InvalidLine.SKIP, encoding_errors="replace"):
+        if raw.get("type") in RAW_EVENT_TYPES:
             flat = flatten_wire_event(raw)
             if flat is not None:
                 events.append(flat)

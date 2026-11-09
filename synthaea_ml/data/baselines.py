@@ -10,12 +10,12 @@ depends on the platform the capture came from:
   does not populate `argv[]`, so the string is used as-is.
 """
 
-import json
 from collections.abc import Callable, Hashable, Iterable
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
 from synthaea_ml.data.canonical import ml_cmdline_from_record
+from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
 from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
 
 Platform = Literal["linux", "windows"]
@@ -49,7 +49,8 @@ def load_cmdlines(baseline_dir: Path, platform: Platform) -> list[str]:
     Blank lines are skipped. Duplicates are kept so callers can report the raw count;
     pass the result through `unique_in_order` to deduplicate.
 
-    Raises `FileNotFoundError` when the baseline file is missing.
+    Raises `FileNotFoundError` when the baseline file is missing, and
+    `InvalidJsonlLineError` on a line that is not a JSON object.
     """
     baseline_path = baseline_dir / DEFAULT_BASELINE_FILENAME
     if not baseline_path.exists():
@@ -57,7 +58,6 @@ def load_cmdlines(baseline_dir: Path, platform: Platform) -> list[str]:
 
     cmdline_from_record = _CMDLINE_FROM_RECORD[platform]
     return [
-        cmdline_from_record(json.loads(line))
-        for line in baseline_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        cmdline_from_record(record)
+        for record in iter_jsonl(baseline_path, on_invalid=InvalidLine.RAISE)
     ]
