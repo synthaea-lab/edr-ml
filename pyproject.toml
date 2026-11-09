@@ -124,19 +124,9 @@ disable_error_code = ["type-arg", "no-untyped-def"]
 module = "synthaea_ml.evaluation.mutations.lineage"
 disable_error_code = ["arg-type"]
 
-# ConformalCalibration and FeatureBounds are defined twice (calibration and registry),
-# so the trainers pass one where the other is declared.
-[[tool.mypy.overrides]]
-module = [
-    "synthaea_ml.training.train_behavior",
-    "synthaea_ml.training.train_linux",
-    "synthaea_ml.training.train_windows",
-]
-disable_error_code = ["arg-type"]
-
 [[tool.mypy.overrides]]
 module = "synthaea_ml.training.train_site_rarity"
-disable_error_code = ["arg-type", "no-any-return"]
+disable_error_code = ["no-any-return"]
 
 [[tool.mypy.overrides]]
 module = "synthaea_ml.training.train_site_model"
