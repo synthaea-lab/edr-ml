@@ -7,6 +7,7 @@ to say anything. They say nothing about detection on a real host.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -279,6 +280,22 @@ def test_identical_benign_vectors_across_datasets_count_once(tmp_path: Path) -> 
     other = _benign_dataset(tmp_path, "other", [_exec(300, 1, ["ls", "-l"], "/tmp/mybash")])
     assert len(gain.benign_matrix([first, second])) == 1
     assert len(gain.benign_matrix([first, second, other])) == 2
+
+
+def test_the_benign_matrix_logs_its_counts_and_writes_nothing_to_stdout(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    same = [_exec(200, 1, ["ls", "-l"], "/usr/sbin/sshd")]
+    first = _benign_dataset(tmp_path, "first", same)
+    second = _benign_dataset(tmp_path, "second", same)
+
+    with caplog.at_level(logging.INFO, logger=gain.__name__):
+        gain.benign_matrix([first, second])
+
+    assert [r.getMessage() for r in caplog.records if r.name == gain.__name__] == [
+        "Benign capture: 2 process incarnations -> 1 distinct vectors"
+    ]
+    assert capsys.readouterr().out == ""
 
 
 def test_the_command_line_hands_the_comparison_a_23_column_benign_matrix(

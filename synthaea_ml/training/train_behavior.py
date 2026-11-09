@@ -28,10 +28,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
 
+from synthaea_ml.cli_logging import configure_cli_logging
 from synthaea_ml.data.behavior_dataset import load_records
 from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME
 from synthaea_ml.features import t1
@@ -48,6 +50,8 @@ from synthaea_ml.training.pipeline import (
     write_scorer_metadata,
 )
 
+logger = logging.getLogger(__name__)
+
 TRAINING_SCRIPT = "synthaea_ml/training/train_behavior.py"
 
 
@@ -63,7 +67,9 @@ def load_matrix(dataset_dirs: list[Path]) -> np.ndarray:
         for record in load_records(d / BEHAVIOR_CAPTURE_FILENAME):
             total += 1
             rows[tuple(t1.extract_features(record))] = None
-    print(f"Behavior capture: {total} process incarnations -> {len(rows)} distinct vectors")
+    logger.info(
+        "Behavior capture: %d process incarnations -> %d distinct vectors", total, len(rows)
+    )
     if len(rows) < BEHAVIOR_MIN_SAMPLES:
         raise ValueError(
             f"only {len(rows)} distinct behavior vectors (need at least {BEHAVIOR_MIN_SAMPLES}): "
@@ -103,6 +109,7 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    configure_cli_logging()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 

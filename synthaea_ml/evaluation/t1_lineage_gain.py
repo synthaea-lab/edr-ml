@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -45,6 +46,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.metrics import roc_auc_score
 
 from synthaea_ml.calibration import calibrate_threshold
+from synthaea_ml.cli_logging import configure_cli_logging
 from synthaea_ml.data.behavior_dataset import (
     DEFAULT_WINDOW_NS,
     load_events,
@@ -54,6 +56,8 @@ from synthaea_ml.data.behavior_dataset import (
 from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME
 from synthaea_ml.features import correlation, lineage, t1
 from synthaea_ml.training.config import BEHAVIOR_FOREST, BEHAVIOR_MIN_SAMPLES, CALIBRATION
+
+logger = logging.getLogger(__name__)
 
 # The baseline is the T1 vector without its lineage block: the lineage features come last.
 # The shipped T1 vector has no lineage (ADR-0034); this tool is what justified that, and what
@@ -285,7 +289,9 @@ def benign_matrix(dataset_dirs: list[Path]) -> np.ndarray:
         for record in load_records(directory / BEHAVIOR_CAPTURE_FILENAME):
             total += 1
             rows[tuple(measured_features(record))] = None
-    print(f"Benign capture: {total} process incarnations -> {len(rows)} distinct vectors")
+    logger.info(
+        "Benign capture: %d process incarnations -> %d distinct vectors", total, len(rows)
+    )
     return np.array(list(rows), dtype=np.float32).reshape(-1, MEASURED_FEATURE_COUNT)
 
 
@@ -303,6 +309,7 @@ def main() -> None:
     parser.add_argument("--seeds", type=int, default=20)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    configure_cli_logging()
 
     benign = benign_matrix(list(args.benign_dataset))
     malicious = malicious_matrix(args.malicious_capture, args.root_pid, args.start_ns, args.end_ns)
