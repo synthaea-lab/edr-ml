@@ -21,8 +21,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from synthaea_ml.data.aggregate_correlation import flatten_wire_event
 from synthaea_ml.data.canonical import ml_cmdline_from_record
+from synthaea_ml.data.wire import flatten_wire_event
 from synthaea_ml.evaluation.mutations.base import Mutator
 from synthaea_ml.evaluation.mutations.cmdline import ALL_T0_MUTATORS
 from synthaea_ml.evaluation.mutations.prng import LCG

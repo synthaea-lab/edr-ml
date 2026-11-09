@@ -325,7 +325,7 @@ def test_a_real_agent_capture_carries_lineage_and_incarnation_into_the_t1_tier(
 
 
 def test_a_wire_capture_without_lineage_flattens_as_it_always_did() -> None:
-    from synthaea_ml.data.aggregate_correlation import flatten_wire_event
+    from synthaea_ml.data.wire import flatten_wire_event
 
     flat = flatten_wire_event(
         {"type": "connect", "meta": {"pid": 3, "timestamp_ns": 9}, "daddr": "1.2.3.4", "dport": 80}

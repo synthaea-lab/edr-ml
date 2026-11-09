@@ -21,6 +21,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from synthaea_ml.data.wire import normalize_for_behavior
 from synthaea_ml.features.behavior import extract_behavior_features
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -47,37 +48,6 @@ LAPLACE_ALPHA = 0.5
 # ── Parsing ────────────────────────────────────────────────────────────────────
 
 
-def _normalize_event(e: dict) -> dict:
-    """Flatten the agent's nested event format to the flat format expected downstream.
-
-    Agent format:
-        {"type": "exec",      "meta": {"pid": ..., "timestamp_ns": ...}, "cmdline": ...}
-        {"type": "connect",   "meta": {...}, "daddr_v4": [...], "dport": ..., "is_ipv6": ...}
-        {"type": "connect",   "meta": {...}, "daddr": "1.2.3.4", "dport": ...}  (NAT captures)
-        {"type": "file_open", "meta": {...}, "flags": ..., "path": ...}
-    Flat format:
-        {"type": "exec",     "pid": ..., "ts_ns": ..., "cmdline": ...}
-        {"type": "connect",  "pid": ..., "ts_ns": ..., "daddr_v4": [...], "dport": ...}
-        {"type": "fileopen", "pid": ..., "ts_ns": ..., "flags": ...}
-    """
-    meta = e.get("meta")
-    if meta is None:
-        return e
-    e = dict(e)  # shallow copy — do not mutate the caller's dict
-    e["pid"] = meta.get("pid", 0)
-    e["ts_ns"] = meta.get("timestamp_ns", 0)
-    if e.get("type") == "file_open":
-        e["type"] = "fileopen"
-    # NAT captures emit daddr as a dotted-decimal string; Host-Only captures use
-    # daddr_v4 as a list of ints.  Normalise to daddr_v4 so behavior.py is uniform.
-    if "daddr" in e and "daddr_v4" not in e:
-        try:
-            e["daddr_v4"] = [int(b) for b in e["daddr"].split(".")]
-        except (ValueError, AttributeError):
-            e["daddr_v4"] = [0, 0, 0, 0]
-    return e
-
-
 def load_events(path: Path) -> list[dict]:
     """Load and normalize raw events from an events.jsonl file."""
     events = []
@@ -88,7 +58,7 @@ def load_events(path: Path) -> list[dict]:
                 if not line:
                     continue
                 try:
-                    events.append(_normalize_event(json.loads(line)))
+                    events.append(normalize_for_behavior(json.loads(line)))
                 except json.JSONDecodeError as e:
                     print(f"[warn] events.jsonl line {i} invalid: {e}", file=sys.stderr)
     except FileNotFoundError:

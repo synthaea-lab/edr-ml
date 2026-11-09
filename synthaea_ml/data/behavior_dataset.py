@@ -18,8 +18,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from synthaea_ml.data.aggregate_correlation import RAW_EVENT_TYPES, flatten_wire_event
 from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
+from synthaea_ml.data.wire import RAW_EVENT_TYPES, flatten_wire_event
 from synthaea_ml.features import correlation
 
 DEFAULT_WINDOW_NS = 60 * 1_000_000_000
