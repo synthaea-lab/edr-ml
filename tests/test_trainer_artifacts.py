@@ -73,10 +73,8 @@ def _assert_artifacts(out: Path, x: np.ndarray, feature_names: list[str], script
         assert record[key] == expected, key
 
 
-def _run(monkeypatch: pytest.MonkeyPatch, module, dataset: Path, out: Path) -> None:
-    argv = [module.TRAINING_SCRIPT, "--dataset", str(dataset), "--output-dir", str(out)]
-    monkeypatch.setattr("sys.argv", argv)
-    module.main()
+def _run(module, dataset: Path, out: Path) -> None:
+    assert module.main(["--dataset", str(dataset), "--output-dir", str(out)]) == 0
 
 
 @pytest.mark.parametrize(
@@ -96,7 +94,7 @@ def _run(monkeypatch: pytest.MonkeyPatch, module, dataset: Path, out: Path) -> N
     ids=["linux", "windows"],
 )
 def test_the_cmdline_trainers_write_the_reference_artifacts(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, module, platform: str, rows: list[dict]
+    tmp_path: Path, module, platform: str, rows: list[dict]
 ) -> None:
     dataset = write_baseline_dataset(
         tmp_path / f"{platform}__dev__abc__2026-09-11",
@@ -106,19 +104,17 @@ def test_the_cmdline_trainers_write_the_reference_artifacts(
         platform=platform,
     )
     out = tmp_path / "out"
-    _run(monkeypatch, module, dataset, out)
+    _run(module, dataset, out)
 
     samples = unique_in_order(load_cmdlines(dataset, platform))
     x = np.array([cmdline.extract_features(s) for s in samples], dtype=np.float32)
     _assert_artifacts(out, x, list(cmdline.FEATURE_NAMES), module.TRAINING_SCRIPT)
 
 
-def test_the_behavior_trainer_writes_the_reference_artifacts(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_the_behavior_trainer_writes_the_reference_artifacts(tmp_path: Path) -> None:
     dataset = _write_behavior_dataset(tmp_path, _capture(40))
     out = tmp_path / "out"
-    _run(monkeypatch, train_behavior, dataset, out)
+    _run(train_behavior, dataset, out)
 
     x = train_behavior.load_matrix([dataset])
     _assert_artifacts(out, x, list(t1.FEATURE_NAMES), train_behavior.TRAINING_SCRIPT)

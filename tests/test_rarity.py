@@ -128,9 +128,7 @@ def test_bad_parameters_are_refused() -> None:
 # --- the recalibration run ---------------------------------------------------------------
 
 
-def test_the_site_rarity_run_trains_both_models_and_records_the_effect(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_the_site_rarity_run_trains_both_models_and_records_the_effect(tmp_path) -> None:
     import onnx
 
     from synthaea_ml.registry.training_record import load_training_record
@@ -138,25 +136,21 @@ def test_the_site_rarity_run_trains_both_models_and_records_the_effect(
 
     corpus = write_site_corpus(tmp_path)
     out = tmp_path / "site-model"
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            train_site_rarity.TRAINING_SCRIPT,
-            "--site-corpus",
-            str(corpus),
-            "--site-name",
-            "acme",
-            "--output-dir",
-            str(out),
-            "--min-hosts",
-            "3",
-            # Without it the floor check refuses this corpus (rarity is known for 95% of its
-            # rows): see test_rarity_floor.py.
-            "--withhold-fraction",
-            "0.3",
-        ],
-    )
-    train_site_rarity.main()
+    argv = [
+        "--site-corpus",
+        str(corpus),
+        "--site-name",
+        "acme",
+        "--output-dir",
+        str(out),
+        "--min-hosts",
+        "3",
+        # Without it the floor check refuses this corpus (rarity is known for 95% of its
+        # rows): see test_rarity_floor.py.
+        "--withhold-fraction",
+        "0.3",
+    ]
+    assert train_site_rarity.main(argv) == 0
 
     record = load_training_record(out)
     assert record.dataset_versions[0].name == "site-corpus-acme"
@@ -171,19 +165,13 @@ def test_the_site_rarity_run_trains_both_models_and_records_the_effect(
     assert graph_input.type.tensor_type.shape.dim[1].dim_value == 11
 
 
-def test_a_corpus_too_small_for_a_time_split_is_refused(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_a_corpus_too_small_for_a_time_split_is_refused(tmp_path) -> None:
     from synthaea_ml.training import train_site_rarity
 
     corpus = write_site_corpus(tmp_path, hosts=2, days=2, per_day=2)
-    monkeypatch.setattr(
-        "sys.argv",
-        [train_site_rarity.TRAINING_SCRIPT, "--site-corpus", str(corpus), "--site-name", "x",
-         "--output-dir", str(tmp_path / "o")],
-    )
+    argv = ["--site-corpus", str(corpus), "--site-name", "x", "--output-dir", str(tmp_path / "o")]
     with pytest.raises(ValueError, match="exec events"):
-        train_site_rarity.main()
+        train_site_rarity.main(argv)
 
 
 def test_the_split_is_by_time_and_never_overlaps() -> None:

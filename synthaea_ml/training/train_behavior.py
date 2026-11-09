@@ -27,8 +27,9 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import logging
+import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -49,13 +50,14 @@ from synthaea_ml.training.pipeline import (
     split_for_calibration,
     write_scorer_metadata,
 )
+from synthaea_ml.training.trainer_args import TrainerArgs, TrainerHelp, parse_trainer_args
 
 logger = logging.getLogger(__name__)
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_behavior.py"
 
 
-def load_matrix(dataset_dirs: list[Path]) -> np.ndarray:
+def load_matrix(dataset_dirs: Sequence[Path]) -> np.ndarray:
     """The deduplicated 17-feature matrix of every dataset's capture.
 
     Deduplicated by feature vector: an identical process behavior seen 10 000 times adds
@@ -78,48 +80,35 @@ def load_matrix(dataset_dirs: list[Path]) -> np.ndarray:
     return np.array(list(rows), dtype=np.float32)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--dataset",
-        type=Path,
-        required=True,
-        nargs="+",
-        help="One or more directories, each with events.jsonl + manifest.json.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        required=True,
-        help="Registry version directory (model.onnx + model_record.json are written here).",
-    )
-    parser.add_argument(
-        "--robustness-scenarios",
-        type=Path,
-        nargs="*",
-        default=[],
-        help="Scenario yamls for T1 adversarial robustness evaluation (issue #45/#617).",
-    )
-    parser.add_argument(
-        "--robustness-events",
-        type=Path,
-        help=(
-            "Capture of MALICIOUS activity matching the scenarios (events.jsonl, agent wire "
-            "format). Without it the evaluation falls back to synthetic events."
-        ),
-    )
-    args = parser.parse_args()
-    configure_cli_logging()
+BEHAVIOR_TRAINER_HELP = TrainerHelp(
+    dataset="One or more directories, each with events.jsonl + manifest.json.",
+    output_dir="Registry version directory (model.onnx + model_record.json are written here).",
+    robustness_scenarios=(
+        "Scenario yamls for T1 adversarial robustness evaluation (issue #45/#617)."
+    ),
+    robustness_events=(
+        "Capture of MALICIOUS activity matching the scenarios (events.jsonl, agent wire "
+        "format). Without it the evaluation falls back to synthetic events."
+    ),
+)
 
+
+def parse_args(argv: Sequence[str] | None = None) -> TrainerArgs:
+    """The run's options from `argv` (the process's arguments when `None`)."""
+    return parse_trainer_args(argv, description=__doc__, help_text=BEHAVIOR_TRAINER_HELP)
+
+
+def run(args: TrainerArgs) -> None:
+    """Train, export and record the T1 model the options `args` describe."""
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     # Verify every manifest first: a mutated capture is rejected before any model exists.
     dataset_versions = [
         dataset_version_from_manifest(d, baseline_filename=BEHAVIOR_CAPTURE_FILENAME)
-        for d in args.dataset
+        for d in args.datasets
     ]
 
-    X = load_matrix(args.dataset)
+    X = load_matrix(args.datasets)
     X_train, X_cal = split_for_calibration(X)
     print(f"Split: {len(X_train)} training, {len(X_cal)} calibration")
 
@@ -152,5 +141,13 @@ def main() -> None:
     print(f"T1 model trained on {len(X)} distinct behavior vectors -> {args.output_dir}")
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    """Train from the command line `argv`; returns the exit status."""
+    args = parse_args(argv)
+    configure_cli_logging()
+    run(args)
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

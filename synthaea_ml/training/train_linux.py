@@ -24,8 +24,9 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import logging
+import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -46,6 +47,11 @@ from synthaea_ml.training.pipeline import (
     fit_calibrated_forest,
     split_for_calibration,
     write_scorer_metadata,
+)
+from synthaea_ml.training.trainer_args import (
+    CMDLINE_TRAINER_HELP,
+    TrainerArgs,
+    parse_trainer_args,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,57 +91,30 @@ def _run_sanity_check(clf: IsolationForest) -> None:
         print(f"  {label}: score={score:+.3f} -> {verdict}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--dataset",
-        type=Path,
-        required=True,
-        nargs="+",
-        help=(
-            "One or more baseline directories (each contains baseline.jsonl + "
-            "manifest.json). Multiple datasets concatenate their samples and "
-            "each shows up as its own DatasetVersion in the training record."
-        ),
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        required=True,
-        help="Registry version directory (model.onnx + training.json are written here).",
-    )
-    parser.add_argument(
-        "--robustness-scenarios",
-        type=Path,
-        nargs="*",
-        default=[],
-        help="Optional scenario yamls for adversarial robustness evaluation (issue #45).",
-    )
-    parser.add_argument(
-        "--robustness-events",
-        type=Path,
-        help=(
-            "Optional events.jsonl or baseline.jsonl file for robustness evaluation. "
-            "If provided, uses real events from this file instead of synthetic events."
-        ),
-    )
-    args = parser.parse_args()
-    configure_cli_logging()
+def parse_args(argv: Sequence[str] | None = None) -> TrainerArgs:
+    """The run's options from `argv` (the process's arguments when `None`)."""
+    return parse_trainer_args(argv, description=__doc__, help_text=CMDLINE_TRAINER_HELP)
 
+
+def run(args: TrainerArgs) -> None:
+    """Train, export and record the model the options `args` describe."""
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     # Verify each manifest before touching anything else. A mutated baseline is
     # rejected here (raises ValueError from verify_manifest) rather than silently
     # producing a model that points at a dataset version it was not trained on.
-    dataset_versions = [dataset_version_from_manifest(d) for d in args.dataset]
+    dataset_versions = [dataset_version_from_manifest(d) for d in args.datasets]
 
     cmdlines: list[str] = []
-    for d in args.dataset:
+    for d in args.datasets:
         cmdlines.extend(load_baseline(d))
     # Dedupe once across the concatenated samples so a command line seen in two
     # captures does not double-weight the boundary.
     cmdlines = unique_in_order(cmdlines)
-    print(f"Concatenated & re-deduped across {len(args.dataset)} dataset(s): {len(cmdlines)} unique samples")
+    print(
+        f"Concatenated & re-deduped across {len(args.datasets)} dataset(s): "
+        f"{len(cmdlines)} unique samples"
+    )
 
     X = np.array([extract_features(c) for c in cmdlines], dtype=np.float32)
     X_train, X_cal = split_for_calibration(X)
@@ -178,5 +157,13 @@ def main() -> None:
     _run_sanity_check(forest.model)
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    """Train from the command line `argv`; returns the exit status."""
+    args = parse_args(argv)
+    configure_cli_logging()
+    run(args)
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

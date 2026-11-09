@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 from pathlib import Path
 
 import pytest
@@ -93,7 +92,6 @@ def test_correlation_aggregator_exits_when_the_capture_is_missing(tmp_path: Path
 
 def test_capture_converter_warns_skips_and_dedupes(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -108,10 +106,8 @@ def test_capture_converter_warns_skips_and_dedupes(
         ],
     )
     out = tmp_path / "out" / "baseline.jsonl"
-    monkeypatch.setattr(sys, "argv", ["capture_to_baseline", str(capture), "--out", str(out)])
-
     with caplog.at_level(logging.WARNING):
-        capture_to_baseline.main()
+        assert capture_to_baseline.main([str(capture), "--out", str(out)]) == 0
 
     assert out.read_text(encoding="utf-8").splitlines() == [
         json.dumps({"argv": ["id"]}),
@@ -121,11 +117,5 @@ def test_capture_converter_warns_skips_and_dedupes(
     assert "4 records read, 3 exec events, 2 unique command lines" in capsys.readouterr().out
 
 
-def test_capture_converter_exits_when_the_capture_is_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(sys, "argv", ["capture_to_baseline", str(tmp_path / "absent.jsonl")])
-
-    with pytest.raises(SystemExit) as exited:
-        capture_to_baseline.main()
-    assert exited.value.code == 1
+def test_capture_converter_exits_when_the_capture_is_missing(tmp_path: Path) -> None:
+    assert capture_to_baseline.main([str(tmp_path / "absent.jsonl")]) == 1

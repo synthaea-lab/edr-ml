@@ -34,6 +34,7 @@ import argparse
 import json
 import logging
 import pickle
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -181,7 +182,7 @@ class SiteModelArgs:
 
 def parse_args(argv: Sequence[str] | None = None) -> SiteModelArgs:
     """The run's options from `argv` (the process's arguments when `None`)."""
-    parser = argparse.ArgumentParser(description="Train site-specific Isolation Forest model")
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--global-dataset", type=Path, required=True,
                         help="Global baseline directory (e.g., ml/datasets/baselines/linux__dev__abc__2026-09-11/)")
     parser.add_argument("--site-corpus", type=Path, required=True,
@@ -249,10 +250,8 @@ def site_dataset_versions(args: SiteModelArgs, site_sample_count: int) -> list[D
     ]
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    """Train, floor-check, export and record a site model from the command line `argv`."""
-    args = parse_args(argv)
-    configure_cli_logging()
+def run(args: SiteModelArgs) -> None:
+    """Train, floor-check, export and record the site model the options `args` describe."""
 
     print("=== Loading corpora ===")
     global_corpus = load_global_baseline(args.global_dataset)
@@ -283,5 +282,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"   Combined: {len(combined)} samples")
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    """Train a site model from the command line `argv`; returns the exit status."""
+    args = parse_args(argv)
+    configure_cli_logging()
+    run(args)
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

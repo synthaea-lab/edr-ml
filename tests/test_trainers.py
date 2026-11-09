@@ -78,29 +78,26 @@ def _write_baseline_dir(
 
 
 def _run_trainer(
-    monkeypatch: pytest.MonkeyPatch,
     module,
     *,
     dataset: list[Path],
     output_dir: Path,
 ) -> None:
-    """Invoke a trainer's main() with the given args, via sys.argv."""
+    """Invoke a trainer's main() with the given args."""
     # `--dataset` uses nargs="+", so one flag followed by all paths.
-    argv = [module.TRAINING_SCRIPT, "--dataset", *[str(d) for d in dataset]]
-    argv += ["--output-dir", str(output_dir)]
-    monkeypatch.setattr("sys.argv", argv)
-    module.main()
+    argv = ["--dataset", *[str(d) for d in dataset], "--output-dir", str(output_dir)]
+    assert module.main(argv) == 0
 
 
 # --- Linux -----------------------------------------------------------------
 
 
-def test_train_linux_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_train_linux_end_to_end(tmp_path: Path) -> None:
     dataset = tmp_path / "linux__dev__abc__2026-09-11"
     _write_baseline_dir(dataset, _LINUX_SAMPLES, platform="linux", workload="dev")
     output = tmp_path / "model_out"
 
-    _run_trainer(monkeypatch, train_linux, dataset=[dataset], output_dir=output)
+    _run_trainer(train_linux, dataset=[dataset], output_dir=output)
 
     assert (output / "model.onnx").exists()
     record = load_training_record(output)
@@ -110,9 +107,7 @@ def test_train_linux_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert record.hyperparameters == {"n_estimators": 100, "contamination": 0.05, "random_state": 42}
 
 
-def test_train_linux_rejects_mutated_baseline(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_train_linux_rejects_mutated_baseline(tmp_path: Path) -> None:
     dataset = tmp_path / "linux__dev__abc__2026-09-11"
     _write_baseline_dir(dataset, _LINUX_SAMPLES, platform="linux", workload="dev")
     # Append a sample after the manifest was written - hash no longer matches.
@@ -121,25 +116,21 @@ def test_train_linux_rejects_mutated_baseline(
     output = tmp_path / "model_out"
 
     with pytest.raises(ValueError, match="baseline hash mismatch"):
-        _run_trainer(monkeypatch, train_linux, dataset=[dataset], output_dir=output)
+        _run_trainer(train_linux, dataset=[dataset], output_dir=output)
 
     # Nothing should have been written on the failure path - the point is not
     # to leave a half-emitted model behind pointing at a phantom dataset.
     assert not (output / "model.onnx").exists()
 
 
-def test_train_linux_two_datasets_shows_both_versions(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_train_linux_two_datasets_shows_both_versions(tmp_path: Path) -> None:
     dataset_a = tmp_path / "linux__dev__aaa__2026-09-11"
     dataset_b = tmp_path / "linux__admin__bbb__2026-09-11"
     _write_baseline_dir(dataset_a, _LINUX_SAMPLES, platform="linux", workload="dev")
     _write_baseline_dir(dataset_b, _LINUX_SAMPLES, platform="linux", workload="admin")
     output = tmp_path / "model_out"
 
-    _run_trainer(
-        monkeypatch, train_linux, dataset=[dataset_a, dataset_b], output_dir=output
-    )
+    _run_trainer(train_linux, dataset=[dataset_a, dataset_b], output_dir=output)
 
     record = load_training_record(output)
     assert len(record.dataset_versions) == 2
@@ -151,16 +142,14 @@ def test_train_linux_two_datasets_shows_both_versions(
 # --- Windows ---------------------------------------------------------------
 
 
-def test_train_windows_end_to_end(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_train_windows_end_to_end(tmp_path: Path) -> None:
     dataset = tmp_path / "windows__desktop-user__abc__2026-09-11"
     _write_baseline_dir(
         dataset, _WINDOWS_SAMPLES, platform="windows", workload="desktop-user"
     )
     output = tmp_path / "model_out"
 
-    _run_trainer(monkeypatch, train_windows, dataset=[dataset], output_dir=output)
+    _run_trainer(train_windows, dataset=[dataset], output_dir=output)
 
     assert (output / "model.onnx").exists()
     record = load_training_record(output)
@@ -172,9 +161,7 @@ def test_train_windows_end_to_end(
     assert record.hyperparameters == {"n_estimators": 100, "contamination": 0.05, "random_state": 42}
 
 
-def test_train_windows_rejects_mutated_baseline(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_train_windows_rejects_mutated_baseline(tmp_path: Path) -> None:
     dataset = tmp_path / "windows__desktop-user__abc__2026-09-11"
     _write_baseline_dir(
         dataset, _WINDOWS_SAMPLES, platform="windows", workload="desktop-user"
@@ -184,7 +171,7 @@ def test_train_windows_rejects_mutated_baseline(
     output = tmp_path / "model_out"
 
     with pytest.raises(ValueError, match="baseline hash mismatch"):
-        _run_trainer(monkeypatch, train_windows, dataset=[dataset], output_dir=output)
+        _run_trainer(train_windows, dataset=[dataset], output_dir=output)
 
     assert not (output / "model.onnx").exists()
 
@@ -192,19 +179,13 @@ def test_train_windows_rejects_mutated_baseline(
 # --- Argparse contract -----------------------------------------------------
 
 
-def test_train_linux_missing_dataset_arg_exits_nonzero(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_train_linux_missing_dataset_arg_exits_nonzero(tmp_path: Path) -> None:
     """argparse should reject a call with only --output-dir. The trainer must not
     accept a fallback to a hard-coded path any more (the whole point of this PR)."""
-    monkeypatch.setattr("sys.argv", ["train_linux", "--output-dir", str(tmp_path)])
     with pytest.raises(SystemExit):
-        train_linux.main()
+        train_linux.main(["--output-dir", str(tmp_path)])
 
 
-def test_train_windows_missing_dataset_arg_exits_nonzero(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr("sys.argv", ["train_windows", "--output-dir", str(tmp_path)])
+def test_train_windows_missing_dataset_arg_exits_nonzero(tmp_path: Path) -> None:
     with pytest.raises(SystemExit):
-        train_windows.main()
+        train_windows.main(["--output-dir", str(tmp_path)])

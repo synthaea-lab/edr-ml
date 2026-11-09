@@ -90,10 +90,9 @@ def _write_dataset(
     )
 
 
-def _run(monkeypatch: pytest.MonkeyPatch, dataset: Path, out: Path, *extra: str) -> None:
-    argv = [train_behavior.TRAINING_SCRIPT, "--dataset", str(dataset), "--output-dir", str(out)]
-    monkeypatch.setattr("sys.argv", [*argv, *extra])
-    train_behavior.main()
+def _run(dataset: Path, out: Path, *extra: str) -> None:
+    argv = ["--dataset", str(dataset), "--output-dir", str(out), *extra]
+    assert train_behavior.main(argv) == 0
 
 
 # --- the dataset builder --------------------------------------------------------------
@@ -200,10 +199,10 @@ def test_the_window_ends_at_the_last_event_of_the_incarnation() -> None:
 # --- the trainer ----------------------------------------------------------------------
 
 
-def test_train_behavior_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_train_behavior_end_to_end(tmp_path: Path) -> None:
     d = _write_dataset(tmp_path, _capture(40))
     out = tmp_path / "model_out"
-    _run(monkeypatch, d, out)
+    _run(d, out)
 
     assert (out / "model.onnx").exists()
     metadata = json.loads((out / "model_metadata.json").read_text(encoding="utf-8"))
@@ -224,34 +223,28 @@ def test_train_behavior_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert width == 17, "the exported model takes the 17-feature T1 vector"
 
 
-def test_train_behavior_refuses_a_capture_too_small_to_calibrate(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_train_behavior_refuses_a_capture_too_small_to_calibrate(tmp_path: Path) -> None:
     d = _write_dataset(tmp_path, _capture(5))
     with pytest.raises(ValueError, match="distinct behavior vectors"):
-        _run(monkeypatch, d, tmp_path / "out")
+        _run(d, tmp_path / "out")
 
 
-def test_train_behavior_refuses_a_capture_edited_after_its_manifest(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_train_behavior_refuses_a_capture_edited_after_its_manifest(tmp_path: Path) -> None:
     d = _write_dataset(tmp_path, _capture(40))
     with (d / BEHAVIOR_CAPTURE_FILENAME).open("a", encoding="utf-8") as f:
         f.write(json.dumps(_connect(1000, 99 * S, 22)) + "\n")
     with pytest.raises(ValueError, match="mismatch"):
-        _run(monkeypatch, d, tmp_path / "out")
+        _run(d, tmp_path / "out")
 
 
-def test_the_release_gate_re_verifies_an_events_jsonl_dataset(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_the_release_gate_re_verifies_an_events_jsonl_dataset(tmp_path: Path) -> None:
     baselines = tmp_path / "baselines"
     d = _write_dataset(baselines, _capture(40))
     # The record names a dataset by the manifest-derived name; the gate looks it up
     # under that directory name.
     d = d.rename(baselines / default_dataset_name(d))
     out = tmp_path / "out"
-    _run(monkeypatch, d, out)
+    _run(d, out)
     verify_training_record(out, baselines_root=baselines, scenarios_root=tmp_path)
 
 
@@ -296,7 +289,6 @@ def test_train_behavior_runs_the_t1_robustness_tier_and_records_the_card(
     malicious.write_text("{}\n", encoding="utf-8")
     out = tmp_path / "out"
     _run(
-        monkeypatch,
         d,
         out,
         "--robustness-scenarios",

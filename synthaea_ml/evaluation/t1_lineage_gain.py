@@ -37,6 +37,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -299,7 +301,21 @@ def _report_dict(report: GainReport, notes: dict[str, Any]) -> dict[str, Any]:
     return {**asdict(report), "notes": notes}
 
 
-def main() -> None:
+@dataclass(frozen=True)
+class LineageGainArgs:
+    """The parsed command line of a run."""
+
+    benign_datasets: tuple[Path, ...]
+    malicious_capture: Path
+    root_pid: int
+    start_ns: int
+    end_ns: int
+    seeds: int
+    output: Path
+
+
+def parse_args(argv: Sequence[str] | None = None) -> LineageGainArgs:
+    """The run's options from `argv` (the process's arguments when `None`)."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--benign-dataset", type=Path, required=True, nargs="+")
     parser.add_argument("--malicious-capture", type=Path, required=True)
@@ -308,14 +324,25 @@ def main() -> None:
     parser.add_argument("--end-ns", type=int, required=True)
     parser.add_argument("--seeds", type=int, default=20)
     parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    configure_cli_logging()
+    args = parser.parse_args(argv)
+    return LineageGainArgs(
+        benign_datasets=tuple(args.benign_dataset),
+        malicious_capture=args.malicious_capture,
+        root_pid=args.root_pid,
+        start_ns=args.start_ns,
+        end_ns=args.end_ns,
+        seeds=args.seeds,
+        output=args.output,
+    )
 
-    benign = benign_matrix(list(args.benign_dataset))
+
+def run(args: LineageGainArgs) -> None:
+    """Measure the gain and write its report to `args.output`."""
+    benign = benign_matrix(list(args.benign_datasets))
     malicious = malicious_matrix(args.malicious_capture, args.root_pid, args.start_ns, args.end_ns)
     report = measure_gain(benign, malicious, seeds=args.seeds)
     notes = {
-        "benign_datasets": [str(d / BEHAVIOR_CAPTURE_FILENAME) for d in args.benign_dataset],
+        "benign_datasets": [str(d / BEHAVIOR_CAPTURE_FILENAME) for d in args.benign_datasets],
         "malicious_capture": str(args.malicious_capture),
         "correlation_features": len(correlation.FEATURE_NAMES),
         "reading": (
@@ -336,5 +363,13 @@ def main() -> None:
     )
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    """Measure the lineage gain from the command line `argv`; returns the exit status."""
+    args = parse_args(argv)
+    configure_cli_logging()
+    run(args)
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

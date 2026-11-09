@@ -58,6 +58,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -582,10 +583,8 @@ def _train_both(
     return baseline, candidate
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def run(args: SiteRarityArgs) -> None:
     """Train, check the floors and, if they hold, write the site model with its record."""
-    args = parse_args(argv)
-    configure_cli_logging()
     global_model = load_shipped_model(args.global_model_dir) if args.global_model_dir else None
 
     matrices = _load_matrices(args)
@@ -638,5 +637,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Site model with rarity -> {args.output_dir}")
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    """Train a site model with rarity from the command line `argv`; returns the exit status."""
+    args = parse_args(argv)
+    configure_cli_logging()
+    run(args)
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

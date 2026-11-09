@@ -22,6 +22,23 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["ruff==0.17.0", "mypy==2.4.1", "types-PyYAML==6.0.12.20261103", "pytest>=8"]
 
+# One console command per command-line entry point; `python -m synthaea_ml.<package>.<module>`
+# runs the same `main`. Every `main` takes `argv` and returns the exit status.
+[project.scripts]
+synthaea-ml-aggregate-correlation = "synthaea_ml.data.aggregate_correlation:main"
+synthaea-ml-calibrate-llr = "synthaea_ml.calibration.calibrate_llr:main"
+synthaea-ml-capture-to-baseline = "synthaea_ml.data.capture_to_baseline:main"
+synthaea-ml-manifest = "synthaea_ml.data.manifest:_main"
+synthaea-ml-robustness = "synthaea_ml.evaluation.robustness_cli:main"
+synthaea-ml-t1-lineage-gain = "synthaea_ml.evaluation.t1_lineage_gain:main"
+synthaea-ml-train-behavior = "synthaea_ml.training.train_behavior:main"
+synthaea-ml-train-correlation = "synthaea_ml.training.train_correlation:main"
+synthaea-ml-train-linux = "synthaea_ml.training.train_linux:main"
+synthaea-ml-train-site-model = "synthaea_ml.training.train_site_model:main"
+synthaea-ml-train-site-rarity = "synthaea_ml.training.train_site_rarity:main"
+synthaea-ml-train-windows = "synthaea_ml.training.train_windows:main"
+synthaea-ml-verify-onnx = "synthaea_ml.export.verify_onnx:main"
+
 [tool.setuptools.packages.find]
 include = ["synthaea_ml*"]
 

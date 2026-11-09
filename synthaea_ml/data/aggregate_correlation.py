@@ -27,6 +27,8 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
@@ -74,7 +76,18 @@ def vecteurs_par_pid(events: list[dict], window_ns: int, min_events: int) -> lis
     return out
 
 
-def main() -> None:
+@dataclass(frozen=True)
+class AggregateCorrelationArgs:
+    """The parsed command line of a run."""
+
+    events: Path
+    out: Path
+    window_s: float
+    min_events: int
+
+
+def parse_args(argv: Sequence[str] | None = None) -> AggregateCorrelationArgs:
+    """The run's options from `argv` (the process's arguments when `None`)."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -96,14 +109,21 @@ def main() -> None:
         default=1,
         help="skip PIDs with fewer than N events in the window",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    return AggregateCorrelationArgs(
+        events=args.events, out=args.out, window_s=args.window, min_events=args.min_events
+    )
 
+
+def run(args: AggregateCorrelationArgs) -> int:
+    """Write one correlation vector per PID of the event log; returns the exit status, 1 when
+    the log has no usable event."""
     events = charger_events(args.events)
     if not events:
         print("[error] no usable events in the log.", file=sys.stderr)
-        sys.exit(1)
+        return 1
 
-    vecteurs = vecteurs_par_pid(events, int(args.window * 1_000_000_000), args.min_events)
+    vecteurs = vecteurs_par_pid(events, int(args.window_s * 1_000_000_000), args.min_events)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as f:
         for v in vecteurs:
@@ -111,9 +131,15 @@ def main() -> None:
 
     print(
         f"{len(events)} events → {len(vecteurs)} vectors "
-        f"(1 per PID, window {args.window:g}s, min-events {args.min_events}) → {args.out}"
+        f"(1 per PID, window {args.window_s:g}s, min-events {args.min_events}) → {args.out}"
     )
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Aggregate an event log from the command line `argv`; returns the exit status."""
+    return run(parse_args(argv))
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
