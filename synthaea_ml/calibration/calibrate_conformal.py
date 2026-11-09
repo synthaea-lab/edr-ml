@@ -33,6 +33,8 @@ def calibrate_threshold(
     X_cal: np.ndarray,
     fp_budget: float,
     benign_rate_per_day: float,
+    *,
+    calibrated_at: datetime | None = None,
 ) -> ConformalCalibration:
     """Compute a conformal threshold for a stated FP budget.
 
@@ -44,9 +46,14 @@ def calibrate_threshold(
         X_cal: Calibration feature matrix (30% holdout), shape (n_samples, n_features).
         fp_budget: Maximum acceptable false positives per endpoint per day (e.g., 5.0).
         benign_rate_per_day: Estimated benign events per endpoint per day (e.g., 1000.0).
+        calibrated_at: Timezone-aware moment recorded as `calibrated_at`, written in UTC.
+            Defaults to now; pass it to make the calibration reproducible.
 
     Returns:
         ConformalCalibration with the computed threshold and metadata.
+
+    Raises:
+        ValueError: If `calibrated_at` is naive.
 
     Example:
         >>> clf = IsolationForest(contamination=0.05, random_state=42)
@@ -54,6 +61,11 @@ def calibrate_threshold(
         >>> cal = calibrate_threshold(clf, X_cal, fp_budget=5.0, benign_rate_per_day=1000.0)
         >>> # Now use cal.threshold as the decision boundary: anomaly if score < threshold
     """
+    if calibrated_at is None:
+        calibrated_at = datetime.now(UTC)
+    elif calibrated_at.tzinfo is None:
+        raise ValueError("calibrated_at must be timezone-aware")
+
     scores = model.decision_function(X_cal)
 
     # Target FP rate: if benign_rate = 1000 events/day and fp_budget = 5,
@@ -74,7 +86,7 @@ def calibrate_threshold(
         threshold=threshold,
         calibration_set_size=len(X_cal),
         benign_baseline_rate=benign_rate_per_day,
-        calibrated_at=datetime.now(UTC).isoformat(),
+        calibrated_at=calibrated_at.astimezone(UTC).isoformat(),
     )
 
 

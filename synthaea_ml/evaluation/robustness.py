@@ -31,6 +31,7 @@ from synthaea_ml.features import correlation, t1
 from synthaea_ml.features.cmdline import extract_features
 from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.records import ExpectedDetection, MutationTestResult, RobustnessCard
+from synthaea_ml.timestamps import format_utc
 
 # Every mutator runs at each intensity, in this order: the LCG draws depend on it.
 _INTENSITIES = ("light", "medium", "heavy")
@@ -99,6 +100,7 @@ def run_robustness_evaluation(
     mutation_seed: int = 42,
     threshold: float = 0.0,
     events_source: Path | None = None,
+    tested_at: datetime | None = None,
 ) -> RobustnessCard:
     """Run adversarial evaluation on one scenario.
 
@@ -113,6 +115,8 @@ def run_robustness_evaluation(
             that match the scenario's expected_detections (escape rate is only meaningful
             on originally-detected samples). When it is None, missing, or holds no exec
             record, one synthetic event per expected detection is used instead.
+        tested_at: Timezone-aware moment recorded on the card as `tested_at`. Defaults to
+            now; pass it to make the card reproducible.
 
     Returns:
         RobustnessCard with mutation results and aggregate metrics.
@@ -121,8 +125,10 @@ def run_robustness_evaluation(
         FileNotFoundError: If the scenario yaml is missing.
         NotImplementedError: If tier is "T2".
         ValueError: If tier is invalid, the scenario has no detections, no mutation
-            produced a result, or no event was originally detected.
+            produced a result, no event was originally detected, or `tested_at` is naive.
     """
+    # A given `tested_at` is checked before the run; a default one is read after it.
+    stamp = None if tested_at is None else format_utc(tested_at)
     scenario_name, expected = load_expected_detections(scenario_yaml)
     mutators = _select_mutators_for_tier(tier)
     if not expected:
@@ -132,7 +138,9 @@ def run_robustness_evaluation(
     results = _mutation_results(
         model, events, mutators, rng=LCG(seed=mutation_seed), threshold=threshold, tier=tier
     )
-    return _card_from_results(scenario_name, scenario_yaml, results, threshold)
+    return _card_from_results(
+        scenario_name, scenario_yaml, results, threshold, stamp or format_utc(datetime.now(UTC))
+    )
 
 
 def _events_under_test(
@@ -191,6 +199,7 @@ def _card_from_results(
     scenario_yaml: Path,
     results: list[MutationTestResult],
     threshold: float,
+    tested_at: str,
 ) -> RobustnessCard:
     """Aggregate the mutation results of one scenario into its card.
 
@@ -215,7 +224,7 @@ def _card_from_results(
     return RobustnessCard(
         scenario_name=scenario_name,
         scenario_yaml_sha256=sha256_file(scenario_yaml),
-        tested_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        tested_at=tested_at,
         mutation_results=results,
         escape_rate=sum(r.escaped for r in originally_detected) / len(originally_detected),
         median_score_degradation=statistics.median(score_deltas),
