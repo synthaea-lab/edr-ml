@@ -10,15 +10,15 @@ Each baseline is one directory, built from a capture with
 `python -m synthaea_ml.data.capture_to_baseline`:
 
 ```text
-baselines/<platform>-<host>-<date>[-vN]/
+baselines/<platform>-<label>-<date>[-vN]/
     baseline.jsonl     one sample per line
     manifest.json      provenance, workload label, time range, sample count and SHA-256
 ```
 
 `python -m synthaea_ml.data.manifest write` creates the manifest and
 `python -m synthaea_ml.data.manifest verify <dir>` checks it. A model record binds to the
-manifest's `sample_sha256`, so a baseline cannot change under a model that names it. The host
-is recorded as a truncated hash of its hostname, never the hostname itself.
+manifest's `sample_sha256`, so a baseline cannot change under a model that names it. The
+manifest identifies the capture host only by `host_id`, a truncated hash of its hostname.
 
 ## Committed baselines
 
