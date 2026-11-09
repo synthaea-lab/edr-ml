@@ -19,6 +19,8 @@ import json
 import math
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from synthaea_ml.data.wire import normalize_for_behavior
@@ -329,32 +331,55 @@ def generate_rust(llr: dict[int, dict[str, float]]) -> str:
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 
-def main() -> None:
+@dataclass(frozen=True)
+class CalibrateLlrArgs:
+    """The parsed command line of a run."""
+
+    events: Path
+    alerts: Path
+    window_s: int
+    min_malicious: int
+    out: Path | None
+
+
+def parse_args(argv: Sequence[str] | None = None) -> CalibrateLlrArgs:
+    """The run's options from `argv` (the process's arguments when `None`)."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--events", default="events.jsonl", help="Raw events file")
     parser.add_argument("--alerts", default="alerts.ndjson", help="JSON-Lines alerts file")
     parser.add_argument("--window", type=int, default=60, help="Sliding window in seconds")
     parser.add_argument("--min-mal", type=int, default=1, help="Min malicious PIDs required")
     parser.add_argument("--out", default=None, help="Report file (default: stdout)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    return CalibrateLlrArgs(
+        events=Path(args.events),
+        alerts=Path(args.alerts),
+        window_s=args.window,
+        min_malicious=args.min_mal,
+        out=Path(args.out) if args.out else None,
+    )
 
-    events = load_events(Path(args.events))
-    malicious_pids = load_malicious_pids(Path(args.alerts))
+
+def run(args: CalibrateLlrArgs) -> int:
+    """Compute the empirical LLRs and write the report; returns the exit status, 1 when the
+    alerts name fewer malicious PIDs than required."""
+    events = load_events(args.events)
+    malicious_pids = load_malicious_pids(args.alerts)
 
     print(
         f"[info] {len(events)} events loaded, {len(malicious_pids)} malicious PIDs: {malicious_pids}",
         file=sys.stderr,
     )
 
-    if len(malicious_pids) < args.min_mal:
+    if len(malicious_pids) < args.min_malicious:
         print(
-            f"[error] fewer than {args.min_mal} malicious PID(s) in {args.alerts} — "
+            f"[error] fewer than {args.min_malicious} malicious PID(s) in {args.alerts} — "
             "run AsyncRAT or another malware sample before calibrating.",
             file=sys.stderr,
         )
-        sys.exit(1)
+        return 1
 
-    window_ns = args.window * 1_000_000_000
+    window_ns = args.window_s * 1_000_000_000
     bv_by_pid = group_by_pid_and_window(events, window_ns)
 
     n_benign = sum(len(v) for pid, v in bv_by_pid.items() if pid not in malicious_pids)
@@ -364,12 +389,18 @@ def main() -> None:
 
     report = generate_report(llr, n_benign, n_malicious)
 
-    if args.out:
-        Path(args.out).write_text(report, encoding="utf-8")
+    if args.out is not None:
+        args.out.write_text(report, encoding="utf-8")
         print(f"[info] report written to {args.out}", file=sys.stderr)
     else:
         print(report)
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Calibrate from the command line `argv`; returns the exit status."""
+    return run(parse_args(argv))
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

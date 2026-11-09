@@ -23,7 +23,10 @@ Usage: `python -m synthaea_ml.training.train_correlation`  (venv `ml/.venv`: sci
 skl2onnx / onnx).
 """
 
+import argparse
 import json
+import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -70,7 +73,8 @@ def load_dataset() -> np.ndarray:
     return np.array(vecs, dtype=np.float32)
 
 
-def main() -> None:
+def run() -> None:
+    """Train on `DATA_PATH`, export the model and its metadata, and print the sanity check."""
     X = load_dataset()
     print(
         f"Training set: {X.shape[0]} vectors × {X.shape[1]} features ({', '.join(FEATURE_NAMES)})"
@@ -105,5 +109,15 @@ def main() -> None:
     )
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    """Train from the command line `argv`, which takes no option but `--help`; returns the
+    exit status."""
+    argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    ).parse_args(argv)
+    run()
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

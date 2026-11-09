@@ -333,24 +333,20 @@ def test_the_command_line_hands_the_comparison_a_23_column_benign_matrix(
             ),
         ],
     )
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "t1_lineage_gain",
-            "--benign-dataset",
-            str(dataset),
-            "--malicious-capture",
-            str(malicious),
-            "--root-pid",
-            "100",
-            "--start-ns",
-            str(5 * S),
-            "--end-ns",
-            str(20 * S),
-            "--output",
-            str(tmp_path / "out.json"),
-        ],
-    )
+    argv = [
+        "--benign-dataset",
+        str(dataset),
+        "--malicious-capture",
+        str(malicious),
+        "--root-pid",
+        "100",
+        "--start-ns",
+        str(5 * S),
+        "--end-ns",
+        str(20 * S),
+        "--output",
+        str(tmp_path / "out.json"),
+    ]
     with pytest.raises(Reached):
-        gain.main()
+        gain.main(argv)
     assert seen["benign"][1] == seen["malicious"][1] == gain.MEASURED_FEATURE_COUNT

@@ -41,8 +41,10 @@ Defaults to every `model.onnx` under ml/registry/.
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -211,13 +213,32 @@ def _is_strict_provenance() -> bool:
     return os.environ.get(_STRICT_PROVENANCE_ENV, "").lower() in ("1", "true", "yes")
 
 
-def main() -> None:
-    models = [Path(p) for p in sys.argv[1:]] or sorted(REGISTRY.glob("*/*/model.onnx"))
-    if not models:
-        sys.exit(f"no model.onnx found under {REGISTRY} and none given on the command line")
+def parse_args(argv: Sequence[str] | None = None) -> list[Path]:
+    """The models to verify from `argv` (the process's arguments when `None`); empty when none
+    is given."""
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "models", type=Path, nargs="*", help="model.onnx files (default: the whole registry)"
+    )
+    models: list[Path] = parser.parse_args(argv).models
+    return models
+
+
+def run(models: Sequence[Path]) -> int:
+    """Verify each of `models`, or every registry model when it is empty; returns the exit
+    status, 1 when there is nothing to verify or a model failed."""
+    targets = list(models) or sorted(REGISTRY.glob("*/*/model.onnx"))
+    if not targets:
+        print(
+            f"no model.onnx found under {REGISTRY} and none given on the command line",
+            file=sys.stderr,
+        )
+        return 1
     strict = _is_strict_provenance()
     failures = 0
-    for model in models:
+    for model in targets:
         try:
             verify(model)
             verify_provenance(model.parent, BASELINES, SCENARIOS, strict=strict)
@@ -225,8 +246,15 @@ def main() -> None:
             print(f"FAIL {e}", file=sys.stderr)
             failures += 1
     if failures:
-        sys.exit(f"{failures}/{len(models)} model(s) failed verification")
+        print(f"{failures}/{len(targets)} model(s) failed verification", file=sys.stderr)
+        return 1
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Verify the models the command line `argv` names; returns the exit status."""
+    return run(parse_args(argv))
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -42,7 +42,7 @@ def robustness_stub(monkeypatch: pytest.MonkeyPatch) -> RobustnessStub:
 
 
 @pytest.fixture
-def site_rarity_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SiteRarityRun:
+def site_rarity_run(tmp_path: Path) -> SiteRarityRun:
     """Run `train_site_rarity.main()` on the synthetic site corpus; returns the output dir.
 
     Extra command-line arguments are appended after the fixed ones.
@@ -51,14 +51,11 @@ def site_rarity_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SiteRari
 
     def run(*extra: str) -> Path:
         out = tmp_path / "site-model"
-        monkeypatch.setattr(
-            "sys.argv",
-            [
-                rare.TRAINING_SCRIPT, "--site-corpus", str(write_site_corpus(tmp_path)),
-                "--site-name", "acme", "--output-dir", str(out), "--min-hosts", "3", *extra,
-            ],
-        )
-        rare.main()
+        argv = [
+            "--site-corpus", str(write_site_corpus(tmp_path)),
+            "--site-name", "acme", "--output-dir", str(out), "--min-hosts", "3", *extra,
+        ]
+        assert rare.main(argv) == 0
         return out
 
     return run

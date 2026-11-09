@@ -2,7 +2,6 @@
 
 import dataclasses
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -210,23 +209,19 @@ def _with_cards(*records: TrainingRecord) -> TrainingRecord:
     return dataclasses.replace(records[0], robustness_cards=cards)
 
 
-def _run_verify(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], *args: str
-) -> tuple[int, str]:
-    monkeypatch.setattr(sys, "argv", ["robustness_cli", "verify", *args])
-    with pytest.raises(SystemExit) as exit_info:
-        main()
-    return int(exit_info.value.code or 0), capsys.readouterr().out
+def _run_verify(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str]:
+    exit_code = main(["verify", *args])
+    return exit_code, capsys.readouterr().out
 
 
 def test_verify_cli_prints_metrics_and_passes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     model_dir = _write_record(
         tmp_path / "model", _create_test_record_with_robustness(escape_rate=0.08)
     )
 
-    exit_code, out = _run_verify(monkeypatch, capsys, "--model-dir", str(model_dir))
+    exit_code, out = _run_verify(capsys, "--model-dir", str(model_dir))
 
     assert exit_code == 0
     assert out == (
@@ -242,7 +237,7 @@ def test_verify_cli_prints_metrics_and_passes(
 
 
 def test_verify_cli_reports_every_threshold_failure_per_scenario(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     record = _with_cards(
         _create_test_record_with_robustness("both", 0.20, median_score_degradation=0.30),
@@ -250,7 +245,7 @@ def test_verify_cli_reports_every_threshold_failure_per_scenario(
     )
     model_dir = _write_record(tmp_path / "model", record)
 
-    exit_code, out = _run_verify(monkeypatch, capsys, "--model-dir", str(model_dir))
+    exit_code, out = _run_verify(capsys, "--model-dir", str(model_dir))
 
     assert exit_code == 1
     assert out == (
@@ -273,21 +268,19 @@ def test_verify_cli_reports_every_threshold_failure_per_scenario(
 
 
 def test_verify_cli_fails_a_record_without_robustness_cards(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     record = dataclasses.replace(_create_test_record_with_robustness(), robustness_cards=[])
     model_dir = _write_record(tmp_path / "model", record)
 
-    exit_code, out = _run_verify(
-        monkeypatch, capsys, "--model-dir", str(model_dir), "--no-regression"
-    )
+    exit_code, out = _run_verify(capsys, "--model-dir", str(model_dir), "--no-regression")
 
     assert exit_code == 1
     assert out == f"ERROR: No robustness cards found in {model_dir}\n"
 
 
 def test_verify_cli_regression_compares_scenarios_by_name(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     registry_dir = tmp_path / "cmdline-iforest-linux"
     _write_record(
@@ -308,7 +301,6 @@ def test_verify_cli_regression_compares_scenarios_by_name(
     )
 
     exit_code, out = _run_verify(
-        monkeypatch,
         capsys,
         "--model-dir",
         str(model_dir),
@@ -331,15 +323,13 @@ def test_verify_cli_regression_compares_scenarios_by_name(
 
 
 def test_verify_cli_regression_warns_without_a_previous_version(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     model_dir = _write_record(
         tmp_path / "registry" / "0.1.0", _create_test_record_with_robustness(escape_rate=0.08)
     )
 
-    exit_code, out = _run_verify(
-        monkeypatch, capsys, "--model-dir", str(model_dir), "--no-regression"
-    )
+    exit_code, out = _run_verify(capsys, "--model-dir", str(model_dir), "--no-regression")
 
     assert exit_code == 0
     assert out.endswith(
@@ -352,7 +342,7 @@ def test_verify_cli_regression_warns_without_a_previous_version(
 
 
 def test_verify_cli_regression_warns_when_the_previous_record_is_unreadable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     registry_dir = tmp_path / "registry"
     (registry_dir / "0.1.0").mkdir(parents=True)
@@ -360,9 +350,7 @@ def test_verify_cli_regression_warns_when_the_previous_record_is_unreadable(
         registry_dir / "0.1.1", _create_test_record_with_robustness(escape_rate=0.08)
     )
 
-    exit_code, out = _run_verify(
-        monkeypatch, capsys, "--model-dir", str(model_dir), "--no-regression"
-    )
+    exit_code, out = _run_verify(capsys, "--model-dir", str(model_dir), "--no-regression")
 
     assert exit_code == 0
     assert out.endswith(
@@ -414,16 +402,14 @@ def test_previous_version_ignores_non_semver_directories(tmp_path: Path) -> None
 
 
 def test_check_regression_is_the_new_name_of_no_regression(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     model_dir = _write_record(
         tmp_path / "registry" / "0.1.0", _create_test_record_with_robustness(escape_rate=0.08)
     )
 
-    _, old_name = _run_verify(monkeypatch, capsys, "--model-dir", str(model_dir), "--no-regression")
-    _, new_name = _run_verify(
-        monkeypatch, capsys, "--model-dir", str(model_dir), "--check-regression"
-    )
+    _, old_name = _run_verify(capsys, "--model-dir", str(model_dir), "--no-regression")
+    _, new_name = _run_verify(capsys, "--model-dir", str(model_dir), "--check-regression")
 
     assert new_name == old_name
     assert "regression check" in new_name

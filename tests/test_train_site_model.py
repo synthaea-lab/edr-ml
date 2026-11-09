@@ -75,9 +75,7 @@ def _write_site_corpus(path: Path) -> None:
     )
 
 
-def _run_trainer(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *extra_args: str
-) -> Path:
+def _run_trainer(tmp_path: Path, *extra_args: str) -> Path:
     """Run `train_site_model.main()` on a small global baseline and site corpus; returns the
     output directory. `extra_args` are appended after the required arguments."""
     global_dir = tmp_path / "linux__dev__abc__2026-09-11"
@@ -85,22 +83,18 @@ def _run_trainer(
     corpus = tmp_path / "corpus-v1.jsonl"
     _write_site_corpus(corpus)
     out = tmp_path / "site-model"
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            train_site_model.TRAINING_SCRIPT,
-            "--global-dataset",
-            str(global_dir),
-            "--site-corpus",
-            str(corpus),
-            "--output-dir",
-            str(out),
-            "--site-name",
-            "acme",
-            *extra_args,
-        ],
-    )
-    train_site_model.main()
+    argv = [
+        "--global-dataset",
+        str(global_dir),
+        "--site-corpus",
+        str(corpus),
+        "--output-dir",
+        str(out),
+        "--site-name",
+        "acme",
+        *extra_args,
+    ]
+    assert train_site_model.main(argv) == 0
     return out
 
 
@@ -129,10 +123,8 @@ def _floor_args(tmp_path: Path) -> list[str]:
     return ["--robustness-scenarios", str(scenario), "--global-model", str(global_model)]
 
 
-def test_the_site_trainer_completes_and_records_both_datasets(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    out = _run_trainer(monkeypatch, tmp_path)
+def test_the_site_trainer_completes_and_records_both_datasets(tmp_path: Path) -> None:
+    out = _run_trainer(tmp_path)
 
     assert (out / "model.onnx").exists()
     record = load_training_record(out)
@@ -149,7 +141,7 @@ def test_a_site_model_within_tolerance_of_the_global_model_passes_the_floor(
         global_=robustness_card(0.10, 0.20),
     )
 
-    out = _run_trainer(monkeypatch, tmp_path, *_floor_args(tmp_path))
+    out = _run_trainer(tmp_path, *_floor_args(tmp_path))
 
     assert (out / "model.onnx").exists()
     assert [isinstance(m, IsolationForest) for m in evaluated] == [False, True]
@@ -163,7 +155,7 @@ def test_a_site_model_that_escapes_more_than_the_global_model_fails_the_floor(
     _stub_robustness(monkeypatch, site=robustness_card(0.30, 0.20), global_=robustness_card(0.10, 0.20))
 
     with pytest.raises(ValueError, match="Global-model-floor check failed"):
-        _run_trainer(monkeypatch, tmp_path, *_floor_args(tmp_path))
+        _run_trainer(tmp_path, *_floor_args(tmp_path))
 
     out = capsys.readouterr().out
     assert "Global-model-floor check FAILED" in out
@@ -178,7 +170,7 @@ def test_a_site_model_that_degrades_more_than_the_global_model_fails_the_floor(
     _stub_robustness(monkeypatch, site=robustness_card(0.10, 0.50), global_=robustness_card(0.10, 0.20))
 
     with pytest.raises(ValueError, match="Global-model-floor check failed"):
-        _run_trainer(monkeypatch, tmp_path, *_floor_args(tmp_path))
+        _run_trainer(tmp_path, *_floor_args(tmp_path))
 
     out = capsys.readouterr().out
     assert "Median degradation regression: 0.500 > 0.200 + 0.10" in out
@@ -196,7 +188,7 @@ def test_the_floor_is_skipped_with_a_warning_when_only_one_of_its_inputs_is_give
     floor_args = _floor_args(tmp_path)
     one_input = floor_args[floor_args.index(given) : floor_args.index(given) + 2]
 
-    out = _run_trainer(monkeypatch, tmp_path, *one_input)
+    out = _run_trainer(tmp_path, *one_input)
 
     assert (out / "model.onnx").exists()
     assert evaluated == []

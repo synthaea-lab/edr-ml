@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -374,8 +374,25 @@ def generate_report(model_dir: Path, output: Path | None = None) -> None:
         print(report)
 
 
-def main() -> None:
-    """Run the ``verify`` or ``report`` command; ``verify`` exits 1 when a gate fails."""
+@dataclass(frozen=True)
+class VerifyArgs:
+    """The parsed command line of a ``verify`` run."""
+
+    model_dir: Path
+    thresholds: RobustnessThresholds
+    check_regression: bool
+
+
+@dataclass(frozen=True)
+class ReportArgs:
+    """The parsed command line of a ``report`` run."""
+
+    model_dir: Path
+    output: Path | None
+
+
+def parse_args(argv: Sequence[str] | None = None) -> VerifyArgs | ReportArgs:
+    """The command and its options from `argv` (the process's arguments when `None`)."""
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -430,20 +447,35 @@ def main() -> None:
         help="Output path for report (default: stdout)",
     )
 
-    args = parser.parse_args()
-
+    args = parser.parse_args(argv)
     if args.command == "verify":
-        thresholds = RobustnessThresholds(
-            max_escape_rate=args.max_escape_rate,
-            max_median_degradation=args.max_median_degradation,
-            max_regression_increase=args.max_regression_increase,
+        return VerifyArgs(
+            model_dir=args.model_dir,
+            thresholds=RobustnessThresholds(
+                max_escape_rate=args.max_escape_rate,
+                max_median_degradation=args.max_median_degradation,
+                max_regression_increase=args.max_regression_increase,
+            ),
+            check_regression=args.check_regression,
         )
-        verification = verify_robustness(args.model_dir, thresholds, args.check_regression)
+    return ReportArgs(model_dir=args.model_dir, output=args.output)
+
+
+def run(args: VerifyArgs | ReportArgs) -> int:
+    """Run the ``verify`` or ``report`` command; returns the exit status, 1 when ``verify``
+    finds a failed gate."""
+    if isinstance(args, VerifyArgs):
+        verification = verify_robustness(args.model_dir, args.thresholds, args.check_regression)
         print(render_verification(verification))
-        sys.exit(0 if verification.passed else 1)
-    elif args.command == "report":
-        generate_report(args.model_dir, args.output)
+        return 0 if verification.passed else 1
+    generate_report(args.model_dir, args.output)
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command the command line `argv` names; returns the exit status."""
+    return run(parse_args(argv))
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -82,7 +82,9 @@ python -m synthaea_ml.training.train_linux --dataset datasets/baselines/linux-ws
 ```
 
 Every command-line entry point runs as `python -m synthaea_ml.<package>.<module>` and
-documents its arguments with `--help`.
+documents its arguments with `--help`. `pip install -e .` also puts each one on the `PATH` as a
+`synthaea-ml-*` command (for example `synthaea-ml-train-linux` or `synthaea-ml-verify-onnx`);
+`[project.scripts]` in [`pyproject.toml`](pyproject.toml) lists them all.
 
 ## Repository layout
 
