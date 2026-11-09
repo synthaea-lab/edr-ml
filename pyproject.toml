@@ -66,7 +66,7 @@ max-complexity = 10
 "synthaea_ml/calibration/calibrate_llr.py" = ["T201", "C901", "PLR0912", "D103"]
 "synthaea_ml/data/manifest.py" = ["T201", "PLR0913", "D102"]
 "synthaea_ml/evaluation/robustness_cli.py" = ["T201", "C901", "PLR0912", "D103"]
-"synthaea_ml/training/train_site_rarity.py" = ["T201", "PLR0913", "D101", "D102", "D103", "D107"]
+"synthaea_ml/training/train_site_rarity.py" = ["T201", "PLR0913"]
 # The global-model floor check unpickles a model the operator trained locally.
 "synthaea_ml/training/train_site_model.py" = ["T201", "S301", "D103"]
 # Paths such as /tmp/x.sh are command-line and event *data* here, never files opened.

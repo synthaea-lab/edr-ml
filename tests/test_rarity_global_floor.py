@@ -141,7 +141,7 @@ def test_a_candidate_that_flags_the_withheld_state_more_than_the_global_model_fa
 
     floor = rare.check_global_floor(cand, cand_cal, reference, x_test)
 
-    assert floor.fp_withheld > floor.fp_global + rare.WITHHELD_FP_MARGIN
+    assert floor.fp_withheld > floor.fp_reference + rare.WITHHELD_FP_MARGIN
     assert not floor.passed
     assert any("global model" in failure and "withheld" in failure for failure in floor.failures)
 
@@ -154,7 +154,7 @@ def test_a_candidate_trained_with_plenty_of_withheld_rows_holds_the_global_floor
 
     floor = rare.check_global_floor(cand, cand_cal, reference, x_test)
 
-    assert floor.fp_withheld <= floor.fp_global + rare.WITHHELD_FP_MARGIN
+    assert floor.fp_withheld <= floor.fp_reference + rare.WITHHELD_FP_MARGIN
     assert floor.passed, floor.failures
     assert floor.scenario_lines == []
 
@@ -285,8 +285,8 @@ def test_a_failing_global_floor_stops_the_run_before_any_model_is_written(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, global_forest: IsolationForest,
     site_rarity_run: SiteRarityRun,
 ) -> None:
-    failing = rare.GlobalFloor(
-        passed=False, fp_global=0.0, fp_withheld=0.9, scenario_lines=[],
+    failing = rare.FloorResult(
+        reference_name="global model", fp_reference=0.0, fp_withheld=0.9, scenario_lines=[],
         failures=["with the rarity withheld the candidate flags 90.00% against the global model's 0.00%"],
         threshold=0.0, threshold_source="model_metadata.json",
     )

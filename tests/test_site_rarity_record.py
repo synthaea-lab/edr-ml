@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 from helpers import RobustnessStub, SiteRarityRun, cmdline_rows, robustness_card
 from siblings import needs, sibling
 from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
 from synthaea_ml.registry.training_record import load_training_record
+from synthaea_ml.training import train_site_rarity as rare
 
 BEACON = sibling("scenarios", "scenarios", "beacon.yaml")
 ONNX_OPSET = {"": 18, "ai.onnx.ml": 3}
@@ -98,4 +101,55 @@ def test_a_run_with_scenarios_and_the_global_model_writes_exactly_these_extras(
             "median degradation 0.000 vs 0.000"
         ),
         "fp_rate_test_global_model": "0.0000",
+    }
+
+
+def test_the_extras_format_each_measurement_to_its_fixed_precision() -> None:
+    args = rare.SiteRarityArgs(
+        site_corpus=Path("corpus.jsonl"), site_name="acme", output_dir=Path("out"), k=5,
+        min_hosts=4, interval_hours=12.5, withhold_fraction=0.25,
+        robustness_scenarios=(), global_model_dir=None,
+    )
+    matrices = rare.SiteMatrices(
+        record_count=1200, cmdline=np.zeros((3, 9)), with_rarity=np.zeros((3, 11)),
+        known_fraction=0.123456,
+    )
+
+    def measured(fp: float, threshold: float) -> rare.MeasuredForest:
+        forest = SimpleNamespace(calibration=SimpleNamespace(threshold=threshold))
+        return rare.MeasuredForest(forest, fp)
+
+    floor = rare.FloorResult("cmdline-only model", 0.0125, 0.01875, [], [])
+    shipped = rare.FloorResult(
+        "global model", 0.03125, 0.01875, [], [],
+        threshold=-0.0625, threshold_source="model_metadata.json",
+    )
+
+    extras = rare.record_extras(
+        args, matrices, baseline=measured(0.0125, -0.1234567), candidate=measured(0.0064, -0.5),
+        floor=floor, global_floor=shipped,
+    )
+
+    assert extras == {
+        "site": "acme",
+        "rarity_k": "5",
+        "rarity_min_hosts": "4",
+        "snapshot_interval_hours": "12.5",
+        "exec_events": "3",
+        "rarity_known_fraction": "0.1235",
+        "withhold_fraction": "0.2500",
+        "fp_rate_test_cmdline_only": "0.0125",
+        "fp_rate_test_with_rarity": "0.0064",
+        "threshold_cmdline_only": "-0.123457",
+        "fp_rate_test_with_rarity_withheld": "0.0187",
+        "rarity_floor": (
+            "PASSED (withheld false-positive rate only: 1.88% against 1.25% + 1.00%; "
+            "no scenarios given, so the escape rate was not checked)"
+        ),
+        "global_model_floor": (
+            "PASSED against the global model at its threshold -0.0625 (model_metadata.json): "
+            "withheld false-positive rate 1.88% against 3.12% + 1.00%; "
+            "no scenarios given, so the escape rate was not checked"
+        ),
+        "fp_rate_test_global_model": "0.0312",
     }
