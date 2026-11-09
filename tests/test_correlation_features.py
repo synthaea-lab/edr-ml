@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from synthaea_ml.features.correlation import FEATURE_NAMES, O_CREAT, O_WRONLY, extract_features
+from synthaea_ml.features.correlation import FEATURE_NAMES, extract_features
+from synthaea_ml.features.posix import O_CREAT, O_WRONLY
 
 
 def named(vector: list[float]) -> dict[str, float]:

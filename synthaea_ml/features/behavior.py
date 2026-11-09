@@ -21,12 +21,9 @@ Any change to a feature must be mirrored in both files.
 
 from __future__ import annotations
 
-# ── Rust mirror constants ──────────────────────────────────────────────────────
+from synthaea_ml.features.posix import has_write_intent
 
-O_ACCMODE: int = 0o3
-O_WRONLY: int = 0o1
-O_RDWR: int = 0o2
-O_CREAT: int = 0o100
+# ── Rust mirror constants ──────────────────────────────────────────────────────
 
 # Suspicious directories — same values as is_suspicious_bv() and is_suspicious_win_path()
 _SUSPICIOUS_DIRS = ["appdata", "\\temp\\", "downloads", "desktop", "\\public\\"]
@@ -54,14 +51,6 @@ def _is_private_ipv4(addr: list[int]) -> bool:
     return any(fn(addr) for fn in _PRIVATE_RANGES)
 
 
-def _is_write(flags: int) -> bool:
-    """Write intent — mirror of `schema::has_write_intent` (Rust): access mode
-    `O_WRONLY`/`O_RDWR` (a 2-bit field, so the invalid `0o3` combination is NOT a
-    write — the kernel refuses it), or `O_CREAT`."""
-    access_mode = flags & O_ACCMODE
-    return access_mode in (O_WRONLY, O_RDWR) or bool(flags & O_CREAT)
-
-
 # ── Main extraction ────────────────────────────────────────────────────────────
 
 
@@ -82,7 +71,7 @@ def extract_behavior_features(events: list[dict]) -> list[float]:
 
     exec_events = [e for e in events if e["type"] == "exec"]
     connect_events = [e for e in events if e["type"] == "connect"]
-    write_events = [e for e in events if e["type"] == "fileopen" and _is_write(e.get("flags", 0))]
+    write_events = [e for e in events if e["type"] == "fileopen" and has_write_intent(e.get("flags", 0))]
 
     has_exec = 1.0 if exec_events else 0.0
     has_connect = 1.0 if connect_events else 0.0

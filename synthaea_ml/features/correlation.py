@@ -23,12 +23,7 @@ or `O_CREAT`) happens here, exactly mirroring `schema::has_write_intent` on the 
 (`features/behavior.py` applies the same test).
 """
 
-# ── Rust mirror constants (POSIX flags) ───────────────────────────────────────
-
-O_ACCMODE = 0o3
-O_WRONLY = 0o1
-O_RDWR = 0o2
-O_CREAT = 0o100
+from synthaea_ml.features.posix import has_write_intent
 
 FEATURE_NAMES = [
     "spawn_count",
@@ -51,8 +46,7 @@ def _is_file_write(event: dict) -> bool:
     if event.get("type") != "fileopen":
         return False
     flags = int(event.get("flags", 0))
-    access_mode = flags & O_ACCMODE
-    return access_mode in (O_WRONLY, O_RDWR) or bool(flags & O_CREAT)
+    return has_write_intent(flags)
 
 
 def same_generation(recorded: int | None, wanted: int | None) -> bool:
