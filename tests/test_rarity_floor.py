@@ -71,7 +71,7 @@ def test_a_candidate_that_flags_the_withheld_state_fails_the_floor() -> None:
 
     floor = rare.check_rarity_floor(cand, cand_cal, base, base_cal, x_test)
 
-    assert floor.fp_withheld > floor.fp_cmdline_only + rare.WITHHELD_FP_MARGIN
+    assert floor.fp_withheld > floor.fp_reference + rare.WITHHELD_FP_MARGIN
     assert not floor.passed
     assert any("withheld" in failure for failure in floor.failures)
 
@@ -81,7 +81,7 @@ def test_a_candidate_trained_with_plenty_of_withheld_rows_holds_the_floor() -> N
 
     floor = rare.check_rarity_floor(cand, cand_cal, base, base_cal, x_test)
 
-    assert floor.fp_withheld <= floor.fp_cmdline_only + rare.WITHHELD_FP_MARGIN
+    assert floor.fp_withheld <= floor.fp_reference + rare.WITHHELD_FP_MARGIN
     assert floor.passed, floor.failures
     assert floor.scenario_lines == [], "no scenario was asked for, none is reported"
 
@@ -180,8 +180,8 @@ def test_without_scenarios_the_withheld_check_still_runs_and_the_record_says_wha
 def test_a_failing_floor_stops_the_run_before_any_model_is_written(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, site_rarity_run: SiteRarityRun
 ) -> None:
-    failing = rare.RarityFloor(
-        passed=False, fp_cmdline_only=0.0, fp_withheld=0.9, scenario_lines=[],
+    failing = rare.FloorResult(
+        reference_name="cmdline-only model", fp_reference=0.0, fp_withheld=0.9, scenario_lines=[],
         failures=["withheld false-positive rate 90.00% is above 0.00% + 1.00%"],
     )
     monkeypatch.setattr(rare, "check_rarity_floor", lambda *a, **k: failing)

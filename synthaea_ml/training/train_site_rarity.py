@@ -58,11 +58,12 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
+from numpy.typing import ArrayLike
 from sklearn.ensemble import IsolationForest
 
 from synthaea_ml.data.canonical import ml_cmdline_from_record
@@ -78,7 +79,7 @@ from synthaea_ml.features import cmdline, rarity
 from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.codec import write_training_record
 from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
-from synthaea_ml.registry.records import DatasetVersion
+from synthaea_ml.registry.records import ConformalCalibration, DatasetVersion
 from synthaea_ml.training.config import (
     CALIBRATION,
     CMDLINE_FOREST,
@@ -86,6 +87,7 @@ from synthaea_ml.training.config import (
     RANDOM_SEED,
 )
 from synthaea_ml.training.pipeline import (
+    CalibratedForest,
     export_onnx,
     fit_calibrated_forest,
     write_scorer_metadata,
@@ -157,17 +159,33 @@ def time_split(n: int) -> tuple[slice, slice, slice]:
     return slice(0, a), slice(a, b), slice(b, n)
 
 
-def fit_and_measure(
-    x: np.ndarray, names: list[str]
-) -> tuple[IsolationForest, Any, Any, float]:
-    """Trains on the early slice, calibrates on the middle one, and returns
-    `(model, conformal_calibration, feature_bounds, test_fp_rate)`."""
+class Scorer(Protocol):
+    """What the floor checks score with: an isolation forest, or the shipped ONNX model."""
+
+    def decision_function(self, x: ArrayLike) -> np.ndarray:
+        """The anomaly score of each row of `x`; lower is more anomalous."""
+        ...
+
+
+def flag_rate(scores: np.ndarray, threshold: float) -> float:
+    """The share of `scores` below `threshold`, so flagged; 0 for no scores."""
+    return float((scores < threshold).mean()) if len(scores) else 0.0
+
+
+@dataclass(frozen=True)
+class MeasuredForest:
+    """A calibrated forest and the false-positive rate it shows on the benign test slice."""
+
+    forest: CalibratedForest
+    fp_rate_test: float
+
+
+def fit_and_measure(x: np.ndarray, names: list[str]) -> MeasuredForest:
+    """Trains on the early slice, calibrates on the middle one, and measures on the last."""
     train, calibration, test = time_split(len(x))
     forest = fit_calibrated_forest(x[train], x[calibration], names, CMDLINE_FOREST)
-    clf, cal = forest.model, forest.calibration
-    scores = clf.decision_function(x[test])
-    fp_rate = float((scores < cal.threshold).mean()) if len(scores) else 0.0
-    return clf, cal, forest.bounds, fp_rate
+    scores = forest.model.decision_function(x[test])
+    return MeasuredForest(forest, flag_rate(scores, forest.calibration.threshold))
 
 
 class WithheldRarity:
@@ -177,10 +195,12 @@ class WithheldRarity:
     features alone, and a scenario event carries no image hash to look up."""
 
     def __init__(self, model: IsolationForest) -> None:
+        """Wrap the 11-feature `model`."""
         self._model = model
         self.n_features_in_ = len(cmdline.FEATURE_NAMES)
 
-    def decision_function(self, x: Any) -> np.ndarray:
+    def decision_function(self, x: ArrayLike) -> np.ndarray:
+        """The candidate's score of each 9-feature row of `x`, with the rarity withheld."""
         rows = np.asarray(x, dtype=np.float32)
         withheld = np.zeros((len(rows), len(rarity.FEATURE_NAMES)), dtype=np.float32)
         return self._model.decision_function(np.hstack([rows, withheld]))
@@ -206,19 +226,21 @@ def withhold_rows(x: np.ndarray, fraction: float, seed: int, rows: slice) -> np.
     return out
 
 
-def withheld_fp_rate(model: IsolationForest, calibration: Any, x_base_test: np.ndarray) -> float:
+def withheld_fp_rate(
+    model: IsolationForest, calibration: ConformalCalibration, x_base_test: np.ndarray
+) -> float:
     """The share of benign test rows flagged at the model's calibrated threshold with the rarity
     forced to withheld: the false-positive rate of a fleet that has no snapshot yet."""
     if not len(x_base_test):
         return 0.0
     scores = WithheldRarity(model).decision_function(x_base_test)
-    return float((scores < calibration.threshold).mean())
+    return flag_rate(scores, calibration.threshold)
 
 
 def compare_on_scenarios(
     candidate: IsolationForest,
     candidate_threshold: float,
-    reference: Any,
+    reference: Scorer,
     reference_threshold: float,
     reference_name: str,
     scenario_yamls: Sequence[Path],
@@ -272,117 +294,159 @@ def compare_on_scenarios(
 
 
 @dataclass(frozen=True)
-class RarityFloor:
-    passed: bool
-    fp_cmdline_only: float
+class FloorResult:
+    """The outcome of one floor check: the candidate with the rarity withheld against a reference.
+
+    `threshold` and `threshold_source` are the reference's, recorded when the reference is a
+    shipped model whose threshold is read from its metadata (the global model)."""
+
+    reference_name: str
+    fp_reference: float
     fp_withheld: float
     scenario_lines: list[str]
     failures: list[str]
+    threshold: float | None = None
+    threshold_source: str | None = None
+
+    @property
+    def passed(self) -> bool:
+        """Whether the candidate held the floor: no failure was found."""
+        return not self.failures
+
+
+@dataclass(frozen=True)
+class _Reference:
+    """What a floor compares the candidate with, and what failing the false-positive check means."""
+
+    model: Scorer
+    threshold: float
+    name: str
+    consequence: str
+
+
+def _check_floor(
+    candidate: IsolationForest,
+    candidate_cal: ConformalCalibration,
+    reference: _Reference,
+    x_base_test: np.ndarray,
+    scenario_yamls: Sequence[Path],
+) -> FloorResult:
+    """The two checks of a floor: the withheld-state false-positive rate against the reference's,
+    and the scenario suite when `scenario_yamls` are given. Collects every failure rather than
+    stopping at the first, so a run reports all of them."""
+    failures: list[str] = []
+    fp_reference = (
+        flag_rate(reference.model.decision_function(x_base_test), reference.threshold)
+        if len(x_base_test) else 0.0
+    )
+    fp_withheld = withheld_fp_rate(candidate, candidate_cal, x_base_test)
+    if fp_withheld > fp_reference + WITHHELD_FP_MARGIN:
+        failures.append(
+            f"with the rarity withheld the candidate flags {fp_withheld:.2%} of the benign test "
+            f"slice, above the {reference.name}'s {fp_reference:.2%} + {WITHHELD_FP_MARGIN:.2%}: "
+            + reference.consequence
+        )
+    lines, scenario_failures = compare_on_scenarios(
+        candidate, candidate_cal.threshold, reference.model, reference.threshold,
+        reference.name, scenario_yamls,
+    )
+    return FloorResult(reference.name, fp_reference, fp_withheld, lines, failures + scenario_failures)
 
 
 def check_rarity_floor(
     candidate: IsolationForest,
-    candidate_cal: Any,
+    candidate_cal: ConformalCalibration,
     baseline: IsolationForest,
-    baseline_cal: Any,
+    baseline_cal: ConformalCalibration,
     x_base_test: np.ndarray,
     scenario_yamls: Sequence[Path] = (),
-) -> RarityFloor:
-    """The floor of the module docstring: the withheld-state false-positive rate, and the
-    scenario suite when `scenario_yamls` are given. Collects every failure rather than
-    stopping at the first, so a run reports all of them."""
-    failures: list[str] = []
-    fp_base = float((baseline.decision_function(x_base_test) < baseline_cal.threshold).mean()) if len(x_base_test) else 0.0
-    fp_withheld = withheld_fp_rate(candidate, candidate_cal, x_base_test)
-    if fp_withheld > fp_base + WITHHELD_FP_MARGIN:
-        failures.append(
-            f"with the rarity withheld the candidate flags {fp_withheld:.2%} of the benign test "
-            f"slice, above the cmdline-only model's {fp_base:.2%} + {WITHHELD_FP_MARGIN:.2%}: "
-            "a fleet with no snapshot yet would see that false-positive rate"
-        )
-
-    lines, scenario_failures = compare_on_scenarios(
-        candidate, candidate_cal.threshold, baseline, baseline_cal.threshold,
-        "cmdline-only model", scenario_yamls,
+) -> FloorResult:
+    """The floor of the module docstring, against the same corpus's cmdline-only model."""
+    reference = _Reference(
+        baseline, baseline_cal.threshold, "cmdline-only model",
+        "a fleet with no snapshot yet would see that false-positive rate",
     )
-    failures += scenario_failures
-    return RarityFloor(not failures, fp_base, fp_withheld, lines, failures)
-
-
-@dataclass(frozen=True)
-class GlobalFloor:
-    passed: bool
-    fp_global: float
-    fp_withheld: float
-    scenario_lines: list[str]
-    failures: list[str]
-    threshold: float
-    threshold_source: str
+    return _check_floor(candidate, candidate_cal, reference, x_base_test, scenario_yamls)
 
 
 def check_global_floor(
     candidate: IsolationForest,
-    candidate_cal: Any,
+    candidate_cal: ConformalCalibration,
     global_model: ShippedModel,
     x_base_test: np.ndarray,
     scenario_yamls: Sequence[Path] = (),
-) -> GlobalFloor:
+) -> FloorResult:
     """The same two checks as `check_rarity_floor`, against the global model: the candidate with
     the rarity withheld must not flag this corpus's benign test slice more than the global model
     does (plus `WITHHELD_FP_MARGIN`), nor be less robust on the scenario suite, each model at its
-    own threshold. Collects every failure."""
-    failures: list[str] = []
-    fp_global = (
-        float((global_model.decision_function(x_base_test) < global_model.threshold).mean())
-        if len(x_base_test) else 0.0
+    own threshold."""
+    reference = _Reference(
+        global_model, global_model.threshold, "global model",
+        "a fleet with no snapshot yet would see more false positives than with the global model",
     )
-    fp_withheld = withheld_fp_rate(candidate, candidate_cal, x_base_test)
-    if fp_withheld > fp_global + WITHHELD_FP_MARGIN:
-        failures.append(
-            f"with the rarity withheld the candidate flags {fp_withheld:.2%} of the benign test "
-            f"slice, above the global model's {fp_global:.2%} + {WITHHELD_FP_MARGIN:.2%}: "
-            "a fleet with no snapshot yet would see more false positives than with the global model"
-        )
-    lines, scenario_failures = compare_on_scenarios(
-        candidate, candidate_cal.threshold, global_model, global_model.threshold,
-        "global model", scenario_yamls,
-    )
-    failures += scenario_failures
-    return GlobalFloor(
-        not failures, fp_global, fp_withheld, lines, failures,
-        global_model.threshold, global_model.threshold_source,
+    floor = _check_floor(candidate, candidate_cal, reference, x_base_test, scenario_yamls)
+    return replace(
+        floor, threshold=global_model.threshold, threshold_source=global_model.threshold_source
     )
 
 
-def _describe_floor(floor: RarityFloor, with_scenarios: bool) -> str:
+def _describe_floor(floor: FloorResult, with_scenarios: bool) -> str:
     """One line for the training record: what was checked, and what was not."""
     if not with_scenarios:
         return (
             f"PASSED (withheld false-positive rate only: {floor.fp_withheld:.2%} against "
-            f"{floor.fp_cmdline_only:.2%} + {WITHHELD_FP_MARGIN:.2%}; no scenarios given, "
+            f"{floor.fp_reference:.2%} + {WITHHELD_FP_MARGIN:.2%}; no scenarios given, "
             "so the escape rate was not checked)"
         )
     return (
         f"PASSED (withheld false-positive rate {floor.fp_withheld:.2%} against "
-        f"{floor.fp_cmdline_only:.2%} + {WITHHELD_FP_MARGIN:.2%}; "
+        f"{floor.fp_reference:.2%} + {WITHHELD_FP_MARGIN:.2%}; "
         + "; ".join(floor.scenario_lines)
         + ")"
     )
 
 
-def _describe_global_floor(floor: GlobalFloor, with_scenarios: bool) -> str:
-    """One line for the training record: what the global comparison covered."""
+GLOBAL_FLOOR_NOT_CHECKED = (
+    "NOT CHECKED against the global model: the floor above compares the "
+    "candidate with this corpus's cmdline-only model; pass --global-model-dir to "
+    "compare with the global model before this model leaves the lab"
+)
+
+
+def _describe_global_floor(floor: FloorResult | None, with_scenarios: bool) -> str:
+    """One line for the training record: what the global comparison covered, if it was made."""
+    if floor is None:
+        return GLOBAL_FLOOR_NOT_CHECKED
     text = (
         f"PASSED against the global model at its threshold {floor.threshold:g} "
         f"({floor.threshold_source}): withheld false-positive rate {floor.fp_withheld:.2%} "
-        f"against {floor.fp_global:.2%} + {WITHHELD_FP_MARGIN:.2%}"
+        f"against {floor.fp_reference:.2%} + {WITHHELD_FP_MARGIN:.2%}"
     )
     if with_scenarios:
         return text + "; " + "; ".join(floor.scenario_lines)
     return text + "; no scenarios given, so the escape rate was not checked"
 
 
-def main() -> None:
+# --- the command line ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SiteRarityArgs:
+    """The parsed command line of a run."""
+
+    site_corpus: Path
+    site_name: str
+    output_dir: Path
+    k: int
+    min_hosts: int
+    interval_hours: float
+    withhold_fraction: float
+    robustness_scenarios: tuple[Path, ...]
+    global_model_dir: Path | None
+
+
+def parse_args(argv: Sequence[str] | None = None) -> SiteRarityArgs:
+    """The run's options from `argv` (the process's arguments when `None`)."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--site-corpus", type=Path, required=True)
     parser.add_argument("--site-name", required=True, help="Tenant name, for provenance.")
@@ -419,9 +483,81 @@ def main() -> None:
         "threshold): the candidate with the rarity withheld must not be worse than it on the "
         "benign test slice or the scenarios. Without it the global comparison is not made.",
     )
-    args = parser.parse_args()
-    global_model = load_shipped_model(args.global_model_dir) if args.global_model_dir else None
+    args = parser.parse_args(argv)
+    return SiteRarityArgs(
+        site_corpus=args.site_corpus,
+        site_name=args.site_name,
+        output_dir=args.output_dir,
+        k=args.k,
+        min_hosts=args.min_hosts,
+        interval_hours=args.interval_hours,
+        withhold_fraction=args.withhold_fraction,
+        robustness_scenarios=tuple(args.robustness_scenarios),
+        global_model_dir=args.global_model_dir,
+    )
 
+
+@dataclass(frozen=True)
+class SiteMatrices:
+    """The time-ordered feature matrices of a corpus's exec events."""
+
+    record_count: int
+    """Every record of the corpus, exec or not: the dataset's sample count."""
+    cmdline: np.ndarray
+    with_rarity: np.ndarray
+    known_fraction: float
+
+    @property
+    def exec_events(self) -> int:
+        """How many exec events, so rows, the matrices have."""
+        return len(self.with_rarity)
+
+
+def record_extras(
+    args: SiteRarityArgs,
+    matrices: SiteMatrices,
+    *,
+    baseline: MeasuredForest,
+    candidate: MeasuredForest,
+    floor: FloorResult,
+    global_floor: FloorResult | None,
+) -> dict[str, str]:
+    """The `extra` of the training record: the run's settings, its measurements and what the
+    floors covered. The keys and their string formats are part of the record; keep them."""
+    with_scenarios = bool(args.robustness_scenarios)
+    extras = {
+        "site": args.site_name,
+        "rarity_k": str(args.k),
+        "rarity_min_hosts": str(args.min_hosts),
+        "snapshot_interval_hours": str(args.interval_hours),
+        "exec_events": str(matrices.exec_events),
+        "rarity_known_fraction": f"{matrices.known_fraction:.4f}",
+        "withhold_fraction": f"{args.withhold_fraction:.4f}",
+        "fp_rate_test_cmdline_only": f"{baseline.fp_rate_test:.4f}",
+        "fp_rate_test_with_rarity": f"{candidate.fp_rate_test:.4f}",
+        "threshold_cmdline_only": f"{baseline.forest.calibration.threshold:.6f}",
+        "fp_rate_test_with_rarity_withheld": f"{floor.fp_withheld:.4f}",
+        "rarity_floor": _describe_floor(floor, with_scenarios),
+        "global_model_floor": _describe_global_floor(global_floor, with_scenarios),
+    }
+    if global_floor is not None:
+        extras["fp_rate_test_global_model"] = f"{global_floor.fp_reference:.4f}"
+    return extras
+
+
+def _require_floor(floor: FloorResult, summary: str, label: str) -> None:
+    """Print what a floor measured, and stop the run before anything is written if it failed."""
+    print(summary)
+    for line in floor.scenario_lines:
+        print(f"  scenario {line}")
+    if not floor.passed:
+        raise ValueError(
+            f"the {label} failed, no model written:\n  - " + "\n  - ".join(floor.failures)
+        )
+
+
+def _load_matrices(args: SiteRarityArgs) -> SiteMatrices:
+    """The corpus's time-ordered matrices; refuses a corpus too small to split."""
     records = load_corpus(args.site_corpus)
     interval_ns = int(args.interval_hours * 3_600_000_000_000)
     x_base, x_rare, known = build_matrices(records, args.k, args.min_hosts, interval_ns)
@@ -430,86 +566,76 @@ def main() -> None:
             f"only {len(x_rare)} exec events in the corpus (need at least {MIN_ROWS})"
         )
     print(f"{len(x_rare)} exec events; rarity known for {known:.0%} of them")
+    return SiteMatrices(len(records), x_base, x_rare, known)
 
-    base_clf, base_cal, _, base_fp = fit_and_measure(x_base, list(cmdline.FEATURE_NAMES))
-    train_rows, _, test_rows = time_split(len(x_rare))
-    x_fit = withhold_rows(x_rare, args.withhold_fraction, CMDLINE_FOREST.random_state, train_rows)
-    clf, cal, bounds, rare_fp = fit_and_measure(x_fit, FEATURE_NAMES)
+
+def _train_both(
+    x_base: np.ndarray, x_rare: np.ndarray, withhold_fraction: float
+) -> tuple[MeasuredForest, MeasuredForest]:
+    """The cmdline-only baseline and the rarity candidate, on the same time split."""
+    baseline = fit_and_measure(x_base, list(cmdline.FEATURE_NAMES))
+    train_rows, _, _ = time_split(len(x_rare))
+    x_fit = withhold_rows(x_rare, withhold_fraction, CMDLINE_FOREST.random_state, train_rows)
+    candidate = fit_and_measure(x_fit, FEATURE_NAMES)
     print(
-        f"test-slice false-positive rate: cmdline only {base_fp:.2%}, "
-        f"with rarity {rare_fp:.2%} (budget {CALIBRATION.fp_budget_per_endpoint_day:g}/endpoint/day)"
+        f"test-slice false-positive rate: cmdline only {baseline.fp_rate_test:.2%}, "
+        f"with rarity {candidate.fp_rate_test:.2%} "
+        f"(budget {CALIBRATION.fp_budget_per_endpoint_day:g}/endpoint/day)"
     )
+    return baseline, candidate
 
-    floor = check_rarity_floor(clf, cal, base_clf, base_cal, x_base[test_rows], args.robustness_scenarios)
-    print(f"with the rarity withheld: false-positive rate {floor.fp_withheld:.2%}")
-    for line in floor.scenario_lines:
-        print(f"  scenario {line}")
-    if not floor.passed:
-        raise ValueError(
-            "the rarity floor failed, no model written:\n  - " + "\n  - ".join(floor.failures)
-        )
 
+def main(argv: Sequence[str] | None = None) -> None:
+    """Train, check the floors and, if they hold, write the site model with its record."""
+    args = parse_args(argv)
+    global_model = load_shipped_model(args.global_model_dir) if args.global_model_dir else None
+
+    matrices = _load_matrices(args)
+    baseline, candidate = _train_both(
+        matrices.cmdline, matrices.with_rarity, args.withhold_fraction
+    )
+    clf, cal = candidate.forest.model, candidate.forest.calibration
+    base = baseline.forest
+    _, _, test_rows = time_split(matrices.exec_events)
+    x_test = matrices.cmdline[test_rows]
+
+    floor = check_rarity_floor(
+        clf, cal, base.model, base.calibration, x_test, args.robustness_scenarios
+    )
+    _require_floor(
+        floor, f"with the rarity withheld: false-positive rate {floor.fp_withheld:.2%}",
+        "rarity floor",
+    )
     global_floor = None
     if global_model is not None:
-        global_floor = check_global_floor(
-            clf, cal, global_model, x_base[test_rows], args.robustness_scenarios
-        )
-        print(
+        global_floor = check_global_floor(clf, cal, global_model, x_test, args.robustness_scenarios)
+        _require_floor(
+            global_floor,
             f"against the global model: false-positive rate {global_floor.fp_withheld:.2%} "
-            f"with the rarity withheld, {global_floor.fp_global:.2%} for the global model"
+            f"with the rarity withheld, {global_floor.fp_reference:.2%} for the global model",
+            "global model floor",
         )
-        for line in global_floor.scenario_lines:
-            print(f"  scenario {line}")
-        if not global_floor.passed:
-            raise ValueError(
-                "the global model floor failed, no model written:\n  - "
-                + "\n  - ".join(global_floor.failures)
-            )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    export_onnx(clf, x_rare, args.output_dir / MODEL_FILENAME)
-    write_scorer_metadata(args.output_dir / METADATA_FILENAME, cal, bounds)
-
-    corpus_sha = sha256_file(args.site_corpus)
+    export_onnx(clf, matrices.with_rarity, args.output_dir / MODEL_FILENAME)
+    write_scorer_metadata(args.output_dir / METADATA_FILENAME, cal, candidate.forest.bounds)
     write_training_record(
         args.output_dir,
         training_script=TRAINING_SCRIPT,
         dataset_versions=[
             DatasetVersion(
                 name=f"site-corpus-{args.site_name}",
-                baseline_sha256=corpus_sha,
-                sample_count=len(records),
+                baseline_sha256=sha256_file(args.site_corpus),
+                sample_count=matrices.record_count,
             )
         ],
         hyperparameters=CMDLINE_FOREST.hyperparameters(),
         conformal_calibration=cal,
-        feature_bounds=bounds,
-        extra={
-            "site": args.site_name,
-            "rarity_k": str(args.k),
-            "rarity_min_hosts": str(args.min_hosts),
-            "snapshot_interval_hours": str(args.interval_hours),
-            "exec_events": str(len(x_rare)),
-            "rarity_known_fraction": f"{known:.4f}",
-            "withhold_fraction": f"{args.withhold_fraction:.4f}",
-            "fp_rate_test_cmdline_only": f"{base_fp:.4f}",
-            "fp_rate_test_with_rarity": f"{rare_fp:.4f}",
-            "threshold_cmdline_only": f"{base_cal.threshold:.6f}",
-            "fp_rate_test_with_rarity_withheld": f"{floor.fp_withheld:.4f}",
-            "rarity_floor": _describe_floor(floor, bool(args.robustness_scenarios)),
-            "global_model_floor": (
-                _describe_global_floor(global_floor, bool(args.robustness_scenarios))
-                if global_floor is not None
-                else "NOT CHECKED against the global model: the floor above compares the "
-                "candidate with this corpus's cmdline-only model; pass --global-model-dir to "
-                "compare with the global model before this model leaves the lab"
-            ),
-            **(
-                {"fp_rate_test_global_model": f"{global_floor.fp_global:.4f}"}
-                if global_floor is not None
-                else {}
-            ),
-        },
+        feature_bounds=candidate.forest.bounds,
+        extra=record_extras(
+            args, matrices,
+            baseline=baseline, candidate=candidate, floor=floor, global_floor=global_floor,
+        ),
     )
     print(f"Site model with rarity -> {args.output_dir}")
 
