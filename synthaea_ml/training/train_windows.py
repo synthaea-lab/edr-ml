@@ -40,7 +40,7 @@ from synthaea_ml.calibration import (
     calibrate_threshold,
     compute_feature_bounds,
 )
-from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
+from synthaea_ml.data.baselines import load_cmdlines, unique_in_order
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features.cmdline import FEATURE_NAMES, extract_features
 from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
@@ -77,21 +77,8 @@ def load_baseline(baseline_dir: Path) -> list[str]:
     full image path, no argv splitting on this platform. Deduplication is by cmdline
     string: a process that runs 10 000 times adds one sample.
     """
-    baseline_path = baseline_dir / DEFAULT_BASELINE_FILENAME
-    if not baseline_path.exists():
-        raise FileNotFoundError(f"baseline not found: {baseline_path}")
-
-    cmdlines: list[str] = []
-    for line in baseline_path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            cmdlines.append(json.loads(line)["cmdline"])
-
-    seen: set[str] = set()
-    unique: list[str] = []
-    for c in cmdlines:
-        if c not in seen:
-            seen.add(c)
-            unique.append(c)
+    cmdlines = load_cmdlines(baseline_dir, "windows")
+    unique = unique_in_order(cmdlines)
     print(f"Baseline: {len(cmdlines)} entries -> {len(unique)} unique after deduplication")
     return unique
 
@@ -157,7 +144,7 @@ def main() -> None:
         cmdlines.extend(load_baseline(d))
     # Dedupe once across the concatenated samples so a command line seen in two
     # captures does not double-weight the boundary.
-    cmdlines = list(dict.fromkeys(cmdlines))
+    cmdlines = unique_in_order(cmdlines)
     print(
         f"Concatenated & re-deduped across {len(args.dataset)} dataset(s): "
         f"{len(cmdlines)} unique samples"
