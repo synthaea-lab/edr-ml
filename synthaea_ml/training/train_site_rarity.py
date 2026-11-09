@@ -63,10 +63,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
-from synthaea_ml.calibration import calibrate_threshold, compute_feature_bounds
 from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.common_set import (
     DEFAULT_INTERVAL_NS,
@@ -85,6 +83,11 @@ from synthaea_ml.training.config import (
     CMDLINE_FOREST,
     FLOOR_TOLERANCE,
     RANDOM_SEED,
+)
+from synthaea_ml.training.pipeline import (
+    export_onnx,
+    fit_calibrated_forest,
+    write_scorer_metadata,
 )
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_site_rarity.py"
@@ -159,18 +162,11 @@ def fit_and_measure(
     """Trains on the early slice, calibrates on the middle one, and returns
     `(model, conformal_calibration, feature_bounds, test_fp_rate)`."""
     train, calibration, test = time_split(len(x))
-    clf = IsolationForest(**CMDLINE_FOREST.hyperparameters())
-    clf.fit(x[train])
-    cal = calibrate_threshold(
-        clf,
-        x[calibration],
-        fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
-        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
-    )
-    bounds = compute_feature_bounds(x[train], names, margin=CALIBRATION.feature_bounds_margin)
+    forest = fit_calibrated_forest(x[train], x[calibration], names, CMDLINE_FOREST)
+    clf, cal = forest.model, forest.calibration
     scores = clf.decision_function(x[test])
     fp_rate = float((scores < cal.threshold).mean()) if len(scores) else 0.0
-    return clf, cal, bounds, fp_rate
+    return clf, cal, forest.bounds, fp_rate
 
 
 class WithheldRarity:
@@ -470,23 +466,8 @@ def main() -> None:
             )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    onnx_model = to_onnx(clf, x_rare[:1], target_opset={"": 18, "ai.onnx.ml": 3})
-    (args.output_dir / MODEL_FILENAME).write_bytes(onnx_model.SerializeToString())
-    (args.output_dir / METADATA_FILENAME).write_text(
-        json.dumps(
-            {
-                "threshold": cal.threshold,
-                "feature_bounds": {
-                    "feature_names": bounds.feature_names,
-                    "min_values": bounds.min_values,
-                    "max_values": bounds.max_values,
-                },
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    export_onnx(clf, x_rare, args.output_dir / MODEL_FILENAME)
+    write_scorer_metadata(args.output_dir / METADATA_FILENAME, cal, bounds)
 
     corpus_sha = sha256_file(args.site_corpus)
     write_training_record(

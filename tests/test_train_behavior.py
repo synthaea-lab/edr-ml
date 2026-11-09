@@ -23,7 +23,7 @@ from synthaea_ml.registry.training_record import (
     load_training_record,
     verify_training_record,
 )
-from synthaea_ml.training import train_behavior
+from synthaea_ml.training import pipeline, train_behavior
 
 _START = datetime(2026, 10, 2, 10, 0, 0, tzinfo=UTC)
 _END = datetime(2026, 10, 2, 11, 0, 0, tzinfo=UTC)
@@ -289,7 +289,7 @@ def test_train_behavior_runs_the_t1_robustness_tier_and_records_the_card(
             worst_case_degradation=0.2,
         )
 
-    monkeypatch.setattr(train_behavior, "run_robustness_evaluation", fake_evaluation)
+    monkeypatch.setattr(pipeline, "run_robustness_evaluation", fake_evaluation)
     d = _write_dataset(tmp_path, _capture(40))
     malicious = tmp_path / "malicious.jsonl"
     malicious.write_text("{}\n", encoding="utf-8")

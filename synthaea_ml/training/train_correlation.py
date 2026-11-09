@@ -27,13 +27,15 @@ import json
 from pathlib import Path
 
 import numpy as np
-from skl2onnx import to_onnx
-from sklearn.ensemble import IsolationForest
-from sklearn.model_selection import train_test_split
 
-from synthaea_ml.calibration import calibrate_threshold, compute_feature_bounds
 from synthaea_ml.features.correlation import FEATURE_NAMES
-from synthaea_ml.training.config import CALIBRATION, CORRELATION_FOREST, RANDOM_SEED
+from synthaea_ml.training.config import CALIBRATION, CORRELATION_FOREST
+from synthaea_ml.training.pipeline import (
+    export_onnx,
+    fit_calibrated_forest,
+    split_for_calibration,
+    write_scorer_metadata,
+)
 
 DATA_PATH = Path(__file__).parent / "data" / "correlation_train.jsonl"
 MODEL_PATH = Path(__file__).parent / "model_correlation.onnx"
@@ -74,48 +76,20 @@ def main() -> None:
         f"Training set: {X.shape[0]} vectors × {X.shape[1]} features ({', '.join(FEATURE_NAMES)})"
     )
 
-    # Split 70/30 for conformal calibration (issue #46)
-    X_train, X_cal = train_test_split(X, test_size=0.3, random_state=RANDOM_SEED)
+    X_train, X_cal = split_for_calibration(X)
     print(f"Split: {len(X_train)} training, {len(X_cal)} calibration")
 
-    clf = IsolationForest(**CORRELATION_FOREST.hyperparameters())
-    clf.fit(X_train)
-
-    # Conformal calibration: compute threshold for FP budget
-    conformal_cal = calibrate_threshold(
-        clf,
-        X_cal,
-        fp_budget=CALIBRATION.fp_budget_per_endpoint_day,
-        benign_rate_per_day=CALIBRATION.benign_rate_per_day,
-    )
+    forest = fit_calibrated_forest(X_train, X_cal, FEATURE_NAMES, CORRELATION_FOREST)
+    clf = forest.model
     print(
-        f"Conformal calibration: threshold={conformal_cal.threshold:.4f} "
+        f"Conformal calibration: threshold={forest.calibration.threshold:.4f} "
         f"for ≤{CALIBRATION.fp_budget_per_endpoint_day} FP/endpoint/day"
-    )
-
-    # Compute feature bounds for OOD detection
-    bounds = compute_feature_bounds(
-        X_train,
-        list(FEATURE_NAMES),
-        margin=CALIBRATION.feature_bounds_margin,
     )
     print(f"Feature bounds computed with {CALIBRATION.feature_bounds_margin * 100}% margin")
 
-    # Same skl2onnx/onnx pin as train_linux.py / train.py — see their comment.
-    onnx_model = to_onnx(clf, X_train[:1], target_opset={"": 18, "ai.onnx.ml": 3})
-    MODEL_PATH.write_bytes(onnx_model.SerializeToString())
+    export_onnx(clf, X_train, MODEL_PATH)
     print(f"Model exported → {MODEL_PATH}")
-
-    # Export metadata for Rust scorer (issue #46)
-    metadata = {
-        "threshold": conformal_cal.threshold,
-        "feature_bounds": {
-            "feature_names": bounds.feature_names,
-            "min_values": bounds.min_values,
-            "max_values": bounds.max_values,
-        },
-    }
-    METADATA_PATH.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    write_scorer_metadata(METADATA_PATH, forest.calibration, forest.bounds)
     print(f"Metadata exported: {METADATA_PATH}")
 
     print("\nSanity check (scikit-learn):")

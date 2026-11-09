@@ -35,7 +35,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
 from synthaea_ml.data.baselines import load_cmdlines, unique_in_order
@@ -51,6 +50,7 @@ from synthaea_ml.registry.training_record import (
     write_training_record,
 )
 from synthaea_ml.training.config import CMDLINE_FOREST, FLOOR_TOLERANCE, RANDOM_SEED
+from synthaea_ml.training.pipeline import export_onnx
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_site_model.py"
 
@@ -215,12 +215,8 @@ def main():
     # Export to ONNX
     print("\n=== Exporting to ONNX ===")
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    # Pinned like train_linux.py: skl2onnx does not yet follow the `ai.onnx.ml` v4 domain
-    # that onnx 1.22 emits by default.
-    onnx_model = to_onnx(clf, X[:1], target_opset={"": 18, "ai.onnx.ml": 3})
     onnx_path = args.output_dir / MODEL_FILENAME
-    with open(onnx_path, "wb") as f:
-        f.write(onnx_model.SerializeToString())
+    export_onnx(clf, X, onnx_path)
     print(f"Exported: {onnx_path}")
 
     # Write training record with provenance
