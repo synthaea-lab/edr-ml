@@ -75,6 +75,11 @@ CMDLINE_FOREST = IsolationForestConfig(n_estimators=100, contamination=0.05)
 BEHAVIOR_FOREST = IsolationForestConfig(n_estimators=100, contamination=0.05)
 """T1: the behavior model (cmdline + correlation features)."""
 
+BEHAVIOR_MIN_SAMPLES = 20
+"""Fewer distinct incarnations than this cannot support a 70/30 split and a conformal
+threshold; the behavior trainer (and the tools that re-fit it) refuse rather than emit a model
+whose boundary is noise."""
+
 CORRELATION_FOREST = IsolationForestConfig(n_estimators=100, contamination=0.02)
 """The correlation-vector scorer; provisional, see `train_correlation.py`."""
 

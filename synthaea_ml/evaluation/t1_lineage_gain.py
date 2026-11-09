@@ -53,8 +53,7 @@ from synthaea_ml.data.behavior_dataset import (
 )
 from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME
 from synthaea_ml.features import correlation, lineage, t1
-from synthaea_ml.training.config import BEHAVIOR_FOREST, CALIBRATION
-from synthaea_ml.training.train_behavior import MIN_SAMPLES
+from synthaea_ml.training.config import BEHAVIOR_FOREST, BEHAVIOR_MIN_SAMPLES, CALIBRATION
 
 # The baseline is the T1 vector without its lineage block: the lineage features come last.
 # The shipped T1 vector has no lineage (ADR-0034); this tool is what justified that, and what
@@ -145,16 +144,16 @@ def measure_gain(benign: np.ndarray, malicious: np.ndarray, seeds: int = 20) -> 
 
     Raises:
         ValueError: A matrix has the wrong width, the benign set is too small to split three
-            ways (`MIN_SAMPLES` distinct vectors, as the trainer requires) or the malicious
+            ways (`BEHAVIOR_MIN_SAMPLES` distinct vectors, as the trainer requires) or the malicious
             set is empty.
     """
     for name, matrix in (("benign", benign), ("malicious", malicious)):
         if matrix.ndim != 2 or matrix.shape[1] != MEASURED_FEATURE_COUNT:
             raise ValueError(f"{name} matrix must have {MEASURED_FEATURE_COUNT} columns")
     benign, malicious = _distinct(benign), _distinct(malicious)
-    if len(benign) < MIN_SAMPLES:
+    if len(benign) < BEHAVIOR_MIN_SAMPLES:
         raise ValueError(
-            f"only {len(benign)} distinct benign vectors (need at least {MIN_SAMPLES}): "
+            f"only {len(benign)} distinct benign vectors (need at least {BEHAVIOR_MIN_SAMPLES}): "
             "capture a longer and more varied normal-activity session"
         )
     if len(malicious) == 0:

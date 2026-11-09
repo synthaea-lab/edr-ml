@@ -17,9 +17,9 @@ from pathlib import Path
 import pytest
 
 from synthaea_ml.export.verify_onnx import VerificationError, sanity_samples_for
+from synthaea_ml.features.sanity_samples import LINUX_SANITY_SAMPLES as LINUX_SAMPLES
+from synthaea_ml.features.sanity_samples import WINDOWS_SANITY_SAMPLES as WINDOWS_SAMPLES
 from synthaea_ml.registry.training_record import DatasetVersion, write_training_record
-from synthaea_ml.training.train_linux import SANITY_CHECK_SAMPLES as LINUX_SAMPLES
-from synthaea_ml.training.train_windows import SANITY_CHECK_SAMPLES as WINDOWS_SAMPLES
 
 
 def _model_dir(tmp_path: Path, family: str, version: str = "0.1.0") -> Path:

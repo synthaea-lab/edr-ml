@@ -35,6 +35,7 @@ from sklearn.ensemble import IsolationForest
 
 from synthaea_ml.data.baselines import load_cmdlines, unique_in_order
 from synthaea_ml.features.cmdline import FEATURE_NAMES, extract_features
+from synthaea_ml.features.sanity_samples import WINDOWS_SANITY_SAMPLES
 from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
 from synthaea_ml.registry.training_record import (
     dataset_version_from_manifest,
@@ -52,21 +53,8 @@ from synthaea_ml.training.pipeline import (
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_windows.py"
 
-# Windows sanity check - distinguishes legitimate vs suspicious cmdlines.
-# The benign cmdlines reflect the ETW format (full image path, few arguments).
-# The malicious cmdlines simulate encoded payloads or suspicious paths (AppData).
-#
-# Also imported by synthaea_ml.export.verify_onnx as its parity oracle: keep the keys
-# and shape stable, or update verify_onnx in the same change.
-SANITY_CHECK_SAMPLES = {
-    "benign (svchost)": "C:\\Windows\\System32\\svchost.exe",
-    "benign (powershell)": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-    "suspicious (AppData)": (
-        "C:\\Users\\user\\AppData\\Roaming\\Microsoft\\WindowsApps\\RuntimeBroker.exe"
-    ),
-    "suspicious (base64 ps)": "powershell.exe -EncodedCommand ZWNobyBoZWxsbw==",
-    "suspicious (Temp)": "C:\\Users\\user\\AppData\\Local\\Temp\\payload.exe",
-}
+# The samples live in `features.sanity_samples`, shared with `export.verify_onnx`.
+SANITY_CHECK_SAMPLES = WINDOWS_SANITY_SAMPLES
 
 
 def load_baseline(baseline_dir: Path) -> list[str]:
