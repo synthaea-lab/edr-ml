@@ -73,7 +73,7 @@ max-complexity = 10
 "synthaea_ml/features/lineage.py" = ["S108"]
 "synthaea_ml/evaluation/mutations/lineage.py" = ["S108", "ARG002", "D102"]
 "synthaea_ml/evaluation/mutations/cmdline.py" = ["S108", "ARG002", "C901", "ERA001", "D102"]
-"synthaea_ml/evaluation/robustness.py" = ["S108", "ARG001", "C901", "PLR0912", "PLR0913"]
+"synthaea_ml/evaluation/robustness.py" = ["S108", "C901", "PLR0912", "PLR0913"]
 "synthaea_ml/registry/codec.py" = ["PLR0913"]
 # Public functions, methods and classes still without a docstring (pydocstyle D1).
 "synthaea_ml/evaluation/onnx_model.py" = ["D102", "D107"]

@@ -14,6 +14,7 @@ from synthaea_ml.evaluation.robustness import (
     _create_synthetic_event_for_detection,
     _load_events_from_source,
     _score_cmdline,
+    _score_record,
     run_robustness_evaluation,
 )
 from synthaea_ml.features.cmdline import extract_features
@@ -60,8 +61,8 @@ def test_score_cmdline(dummy_model) -> None:
     benign = "bash\0-c\0echo hello\0"
     suspicious = "bash\0-c\0base64 -d\0"
 
-    benign_score = _score_cmdline(dummy_model, benign, threshold=0.0)
-    suspicious_score = _score_cmdline(dummy_model, suspicious, threshold=0.0)
+    benign_score = _score_cmdline(dummy_model, benign)
+    suspicious_score = _score_cmdline(dummy_model, suspicious)
 
     # Both should return float scores
     assert isinstance(benign_score, float)
@@ -180,12 +181,10 @@ def test_t1_does_not_run_the_lineage_mutators(dummy_scenario_yaml) -> None:
 
 
 def test_t1_score_ignores_the_parent_fields() -> None:
-    from synthaea_ml.evaluation.robustness import _t1_features
-
     record = {"argv": ["/bin/sh", "-c", "id"], "parent_comm": "nginx"}
     bare = {"argv": ["/bin/sh", "-c", "id"]}
-    assert _t1_features(record) == _t1_features(bare)
-    assert len(_t1_features(record)) == 17
+    model = _ContextModel()
+    assert _score_record(model, record, "T1") == _score_record(model, bare, "T1")
 
 
 def test_t1_refuses_a_model_of_another_width(dummy_model, dummy_scenario_yaml) -> None:
