@@ -6,10 +6,10 @@ the on-device scorer disagree on the 17-feature vector. Regenerate with
 `fixtures/generators/gen_t1_golden.py` only on a deliberate change.
 """
 
-import json
 from pathlib import Path
 
 import pytest
+from helpers import read_golden_jsonl
 
 from synthaea_ml.data.behavior_dataset import load_records
 from synthaea_ml.features import t1
@@ -18,9 +18,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def golden_rows() -> list[dict]:
-    path = FIXTURES / "t1_golden.jsonl"
-    with path.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+    return read_golden_jsonl(FIXTURES / "t1_golden.jsonl")
 
 
 @pytest.mark.parametrize("row", golden_rows(), ids=lambda r: f"pid{r['pid']}-gen{r['process_generation']}")

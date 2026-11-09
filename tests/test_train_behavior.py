@@ -12,10 +12,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from helpers import write_baseline_dataset
 from siblings import needs, sibling
 
 from synthaea_ml.data.behavior_dataset import load_records, records_from_events
-from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME, write_manifest
+from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME
 from synthaea_ml.features import t1
 from synthaea_ml.registry.training_record import (
     default_dataset_name,
@@ -79,22 +80,13 @@ def _capture(n: int = 40) -> list[dict]:
 def _write_dataset(
     root: Path, events: list[dict], name: str = "linux__dev__abc__2026-10-02"
 ) -> Path:
-    d = root / name
-    d.mkdir(parents=True)
-    (d / BEHAVIOR_CAPTURE_FILENAME).write_text(
-        "\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8"
-    )
-    write_manifest(
-        d,
-        platform="linux",
-        os_version="test",
-        workload_label="dev",
+    return write_baseline_dataset(
+        root / name,
+        [json.dumps(e) for e in events],
         capture_start=_START,
         capture_end=_END,
-        hostname="testhost",
         baseline_filename=BEHAVIOR_CAPTURE_FILENAME,
     )
-    return d
 
 
 def _run(monkeypatch: pytest.MonkeyPatch, dataset: Path, out: Path, *extra: str) -> None:

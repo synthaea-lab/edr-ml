@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 
 import pytest
+from helpers import write_site_corpus
 
 from synthaea_ml.data.common_set import DEFAULT_INTERVAL_NS, point_in_time_snapshots
 from synthaea_ml.features import rarity
@@ -127,32 +128,6 @@ def test_bad_parameters_are_refused() -> None:
 # --- the recalibration run ---------------------------------------------------------------
 
 
-def _corpus(tmp_path, hosts: int = 8, days: int = 20, per_day: int = 6) -> object:
-    """A synthetic site: `hosts` agents run mostly the same tools, plus per-host oddities."""
-    import json
-
-    rows: list[dict] = []
-    common = [f"{i:064x}" for i in range(6)]
-    for day in range(days):
-        for h in range(hosts):
-            for n in range(per_day):
-                shared = (day + h + n) % 4 != 0
-                sha = common[(h + n) % len(common)] if shared else f"{(h * 1000 + day * 10 + n):064x}"
-                stamp = f"2026-09-{1 + day:02d}T{8 + n:02d}:{h:02d}:00Z"
-                argv = ["/usr/bin/tool", f"--mode{n % 3}", "x" * (1 + (day + n) % 5)]
-                rows.append(
-                    {
-                        "timestamp": stamp,
-                        "event_type": "exec",
-                        "agent_id": f"agent-{h}",
-                        "event": {"argv": argv, "image_path": argv[0], "sha256": sha},
-                    }
-                )
-    path = tmp_path / "corpus-v1.jsonl"
-    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-    return path
-
-
 def test_the_site_rarity_run_trains_both_models_and_records_the_effect(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
@@ -161,7 +136,7 @@ def test_the_site_rarity_run_trains_both_models_and_records_the_effect(
     from synthaea_ml.registry.training_record import load_training_record
     from synthaea_ml.training import train_site_rarity
 
-    corpus = _corpus(tmp_path)
+    corpus = write_site_corpus(tmp_path)
     out = tmp_path / "site-model"
     monkeypatch.setattr(
         "sys.argv",
@@ -201,7 +176,7 @@ def test_a_corpus_too_small_for_a_time_split_is_refused(
 ) -> None:
     from synthaea_ml.training import train_site_rarity
 
-    corpus = _corpus(tmp_path, hosts=2, days=2, per_day=2)
+    corpus = write_site_corpus(tmp_path, hosts=2, days=2, per_day=2)
     monkeypatch.setattr(
         "sys.argv",
         [train_site_rarity.TRAINING_SCRIPT, "--site-corpus", str(corpus), "--site-name", "x",
@@ -223,7 +198,7 @@ def test_the_split_is_by_time_and_never_overlaps() -> None:
 def test_rarity_values_in_the_matrix_are_point_in_time(tmp_path) -> None:
     from synthaea_ml.training.train_site_rarity import build_matrices, load_corpus
 
-    records = load_corpus(_corpus(tmp_path))
+    records = load_corpus(write_site_corpus(tmp_path))
     _, x_rare, known = build_matrices(records, k=3, min_hosts=3, interval_ns=DAY)
     # The very first day has no snapshot yet: rarity is unknown there, known later.
     assert x_rare[0, 9] == 0.0 and known > 0.5

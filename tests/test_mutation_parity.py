@@ -5,10 +5,10 @@ The Rust counterpart (crates/ml/tests/mutation_parity.rs) consumes the same file
 Python and Rust extract identical features from mutated events.
 """
 
-import json
 from pathlib import Path
 
 import pytest
+from helpers import read_golden_jsonl
 
 from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.evaluation.mutations.cmdline import (
@@ -34,8 +34,7 @@ MUTATORS = {
 
 def golden_rows() -> list[dict]:
     """Load all golden test cases."""
-    with GOLDEN.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+    return read_golden_jsonl(GOLDEN)
 
 
 @pytest.mark.parametrize("row", golden_rows(), ids=lambda r: f"{r['mutation_class']}_{r['intensity']}")

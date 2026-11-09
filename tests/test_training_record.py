@@ -16,12 +16,12 @@ The properties that need to hold for the release gate to be trustworthy:
 
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from helpers import write_baseline_dataset, write_scenario_yaml
 
 from synthaea_ml.data.manifest import write_manifest
 from synthaea_ml.registry.training_record import (
@@ -56,28 +56,16 @@ def _make_baseline_with_manifest(
     workload: str = "dev",
     hostname: str = "solkapc",
 ) -> None:
-    (dir_path / "baseline.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    write_manifest(
+    write_baseline_dataset(
         dir_path,
+        lines,
+        capture_start=_START,
+        capture_end=_END,
         platform=platform,
         os_version="22.04",
         workload_label=workload,
-        capture_start=_START,
-        capture_end=_END,
         hostname=hostname,
     )
-
-
-def _write_scenario_yaml(scenarios_root: Path, name: str, contents: str) -> tuple[Path, str]:
-    """Write a scenario yaml sidecar and return its path + content hash.
-
-    The tests do not need a schema-valid yaml since the record binds by
-    content hash, not by parse — any deterministic bytes will do.
-    """
-    scenarios_root.mkdir(parents=True, exist_ok=True)
-    path = scenarios_root / f"{name}.yaml"
-    path.write_bytes(contents.encode("utf-8"))
-    return path, hashlib.sha256(contents.encode("utf-8")).hexdigest()
 
 
 def _env(kernel: str = "6.6.0-generic") -> Environment:
@@ -480,7 +468,7 @@ def _make_replay(
     ``passed`` defaults to the value ``compute_passed`` produces (i.e. an honest
     record); callers that want to test the mutation path pass ``passed=`` explicitly.
     """
-    _, sha = _write_scenario_yaml(scenarios_root, name, contents)
+    _, sha = write_scenario_yaml(scenarios_root, name, contents)
     exp = expected if expected is not None else [
         ExpectedDetection(technique="T1071", rule="r", min_count=1, tolerance=0),
     ]

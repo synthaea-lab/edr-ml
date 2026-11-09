@@ -6,10 +6,10 @@ ONNX model would be scoring vectors inconsistent with its training. See generate
 what to do.
 """
 
-import json
 from pathlib import Path
 
 import pytest
+from helpers import read_golden_jsonl
 
 from synthaea_ml.features.cmdline import FEATURE_NAMES, extract_features
 
@@ -17,8 +17,7 @@ GOLDEN = Path(__file__).resolve().parent / "fixtures" / "features_golden.jsonl"
 
 
 def golden_rows() -> list[dict]:
-    with GOLDEN.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+    return read_golden_jsonl(GOLDEN)
 
 
 @pytest.mark.parametrize("row", golden_rows(), ids=lambda r: repr(r["cmdline"][:40]))
