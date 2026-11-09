@@ -50,13 +50,12 @@ import onnxruntime as ort
 
 from synthaea_ml import siblings
 from synthaea_ml.features.cmdline import extract_features
+from synthaea_ml.features.sanity_samples import LINUX_SANITY_SAMPLES, WINDOWS_SANITY_SAMPLES
 from synthaea_ml.registry.training_record import (
     MODEL_RECORD_FILENAME,
     load_training_record,
     verify_training_record,
 )
-from synthaea_ml.training.train_linux import SANITY_CHECK_SAMPLES as _LINUX_SAMPLES
-from synthaea_ml.training.train_windows import SANITY_CHECK_SAMPLES as _WINDOWS_SAMPLES
 
 REGISTRY = Path(__file__).resolve().parents[2] / "registry"
 BASELINES = Path(__file__).resolve().parents[2] / "datasets" / "baselines"
@@ -68,8 +67,8 @@ SCENARIOS = siblings.path("scenarios", "scenarios")
 _STRICT_PROVENANCE_ENV = "SYNTHAEA_STRICT_PROVENANCE"
 
 _PLATFORM_SAMPLES: dict[str, dict[str, str]] = {
-    "linux": _LINUX_SAMPLES,
-    "windows": _WINDOWS_SAMPLES,
+    "linux": LINUX_SANITY_SAMPLES,
+    "windows": WINDOWS_SANITY_SAMPLES,
 }
 
 

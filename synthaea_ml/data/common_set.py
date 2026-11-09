@@ -31,7 +31,7 @@ DEFAULT_INTERVAL_NS = 24 * 3600 * 1_000_000_000
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
-def _timestamp_ns(record: dict[str, Any]) -> int:
+def timestamp_ns(record: dict[str, Any]) -> int:
     """Nanoseconds since the epoch, in integer arithmetic (a float would round at this
     scale). The export writes UTC (`...Z`); a zone-less stamp is read as UTC too."""
     stamp = datetime.fromisoformat(record["timestamp"])
@@ -61,7 +61,7 @@ def point_in_time_snapshots(
     """
     if k < 1 or interval_ns < 1:
         raise ValueError("k and interval_ns must be at least 1")
-    order = sorted(range(len(records)), key=lambda i: (_timestamp_ns(records[i]), i))
+    order = sorted(range(len(records)), key=lambda i: (timestamp_ns(records[i]), i))
     result: list[CommonSetSnapshot | None] = [None] * len(records)
     hosts_by_hash: dict[str, set[str]] = {}
     reporting: set[str] = set()
@@ -69,7 +69,7 @@ def point_in_time_snapshots(
     next_boundary: int | None = None
 
     for i in order:
-        ts = _timestamp_ns(records[i])
+        ts = timestamp_ns(records[i])
         if next_boundary is None:
             next_boundary = ts + interval_ns
         if ts >= next_boundary:

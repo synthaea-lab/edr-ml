@@ -32,6 +32,7 @@ from sklearn.ensemble import IsolationForest
 
 from synthaea_ml.data.baselines import load_cmdlines, unique_in_order
 from synthaea_ml.features.cmdline import FEATURE_NAMES, extract_features
+from synthaea_ml.features.sanity_samples import LINUX_SANITY_SAMPLES
 from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
 from synthaea_ml.registry.training_record import (
     dataset_version_from_manifest,
@@ -49,19 +50,8 @@ from synthaea_ml.training.pipeline import (
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_linux.py"
 
-# Linux sanity check - mirror of SANITY_CHECK_SAMPLES on the Windows side.
-# Benign: taken as-is from the captured baseline. Suspicious: the isolated `base64 -d`
-# exec event captured in the lab on 2026-08-24 (see the contamination comment on
-# `config.CMDLINE_FOREST`)
-# and the Docker healthcheck documented as a known false positive (docs/PLAN.md) -
-# included here to track it, not because it necessarily has to score as an anomaly.
-SANITY_CHECK_SAMPLES = {
-    "benign (whoami)": "whoami\0",
-    "benign (lab script)": "bash\0/tmp/benign_activity.sh\0",
-    "benign (modprobe)": "/sbin/modprobe\0-q\0--\0binfmt-0090\0",
-    "suspicious (base64 decode)": "base64\0-d\0",
-    "known FP (curl health)": "curl\0-f\0http://backend:8000/api/health/\0",
-}
+# The samples live in `features.sanity_samples`, shared with `export.verify_onnx`.
+SANITY_CHECK_SAMPLES = LINUX_SANITY_SAMPLES
 
 
 def load_baseline(baseline_dir: Path) -> list[str]:

@@ -40,7 +40,7 @@ from synthaea_ml.registry.training_record import (
     dataset_version_from_manifest,
     write_training_record,
 )
-from synthaea_ml.training.config import BEHAVIOR_FOREST, CALIBRATION
+from synthaea_ml.training.config import BEHAVIOR_FOREST, BEHAVIOR_MIN_SAMPLES, CALIBRATION
 from synthaea_ml.training.pipeline import (
     describe_card,
     evaluate_robustness,
@@ -51,10 +51,6 @@ from synthaea_ml.training.pipeline import (
 )
 
 TRAINING_SCRIPT = "synthaea_ml/training/train_behavior.py"
-
-MIN_SAMPLES = 20
-"""Fewer distinct incarnations than this cannot support a 70/30 split and a conformal
-threshold; refuse rather than emit a model whose boundary is noise."""
 
 
 def load_matrix(dataset_dirs: list[Path]) -> np.ndarray:
@@ -70,9 +66,9 @@ def load_matrix(dataset_dirs: list[Path]) -> np.ndarray:
             total += 1
             rows[tuple(t1.extract_features(record))] = None
     print(f"Behavior capture: {total} process incarnations -> {len(rows)} distinct vectors")
-    if len(rows) < MIN_SAMPLES:
+    if len(rows) < BEHAVIOR_MIN_SAMPLES:
         raise ValueError(
-            f"only {len(rows)} distinct behavior vectors (need at least {MIN_SAMPLES}): "
+            f"only {len(rows)} distinct behavior vectors (need at least {BEHAVIOR_MIN_SAMPLES}): "
             "capture a longer normal-activity session"
         )
     return np.array(list(rows), dtype=np.float32)

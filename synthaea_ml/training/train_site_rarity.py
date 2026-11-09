@@ -69,8 +69,8 @@ from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.common_set import (
     DEFAULT_INTERVAL_NS,
     DEFAULT_K,
-    _timestamp_ns,
     point_in_time_snapshots,
+    timestamp_ns,
 )
 from synthaea_ml.evaluation.onnx_model import ShippedModel, load_shipped_model
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
@@ -132,7 +132,7 @@ def build_matrices(
     """
     snapshots = point_in_time_snapshots(records, k=k, interval_ns=interval_ns)
     rows = [
-        (_timestamp_ns(r), i)
+        (timestamp_ns(r), i)
         for i, r in enumerate(records)
         if r.get("event_type") == "exec" and isinstance(r.get("event"), dict)
     ]
