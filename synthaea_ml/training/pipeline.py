@@ -32,7 +32,7 @@ from synthaea_ml.calibration import (
     compute_feature_bounds,
 )
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
-from synthaea_ml.registry.training_record import RobustnessCard
+from synthaea_ml.registry.records import RobustnessCard
 from synthaea_ml.training.config import (
     CALIBRATION,
     RANDOM_SEED,

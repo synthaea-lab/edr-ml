@@ -30,7 +30,7 @@ from synthaea_ml.evaluation.scenario_replay import load_expected_detections
 from synthaea_ml.features import correlation, t1
 from synthaea_ml.features.cmdline import extract_features
 from synthaea_ml.hashing import sha256_file
-from synthaea_ml.registry.training_record import MutationTestResult, RobustnessCard
+from synthaea_ml.registry.records import MutationTestResult, RobustnessCard
 
 
 def _score_cmdline(model: Any, cmdline: str, threshold: float) -> float:

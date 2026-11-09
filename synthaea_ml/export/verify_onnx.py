@@ -51,11 +51,9 @@ import onnxruntime as ort
 from synthaea_ml import siblings
 from synthaea_ml.features.cmdline import extract_features
 from synthaea_ml.features.sanity_samples import LINUX_SANITY_SAMPLES, WINDOWS_SANITY_SAMPLES
-from synthaea_ml.registry.training_record import (
-    MODEL_RECORD_FILENAME,
-    load_training_record,
-    verify_training_record,
-)
+from synthaea_ml.registry.codec import load_training_record
+from synthaea_ml.registry.layout import MODEL_RECORD_FILENAME
+from synthaea_ml.registry.provenance import verify_training_record
 
 REGISTRY = Path(__file__).resolve().parents[2] / "registry"
 BASELINES = Path(__file__).resolve().parents[2] / "datasets" / "baselines"

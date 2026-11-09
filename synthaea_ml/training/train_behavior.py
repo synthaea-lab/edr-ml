@@ -35,11 +35,9 @@ import numpy as np
 from synthaea_ml.data.behavior_dataset import load_records
 from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME
 from synthaea_ml.features import t1
+from synthaea_ml.registry.codec import write_training_record
+from synthaea_ml.registry.dataset_binding import dataset_version_from_manifest
 from synthaea_ml.registry.layout import METADATA_FILENAME, MODEL_FILENAME
-from synthaea_ml.registry.training_record import (
-    dataset_version_from_manifest,
-    write_training_record,
-)
 from synthaea_ml.training.config import BEHAVIOR_FOREST, BEHAVIOR_MIN_SAMPLES, CALIBRATION
 from synthaea_ml.training.pipeline import (
     describe_card,

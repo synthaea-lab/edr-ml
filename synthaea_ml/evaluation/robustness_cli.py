@@ -20,7 +20,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from synthaea_ml.registry.training_record import load_training_record
+from synthaea_ml.registry.codec import load_training_record
 
 
 def _find_previous_version(model_dir: Path) -> Path | None:

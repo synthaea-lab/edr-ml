@@ -43,12 +43,10 @@ from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
 from synthaea_ml.features.cmdline import extract_features
 from synthaea_ml.hashing import sha256_file
+from synthaea_ml.registry.codec import write_training_record
+from synthaea_ml.registry.dataset_binding import dataset_version_from_manifest
 from synthaea_ml.registry.layout import MODEL_FILENAME
-from synthaea_ml.registry.training_record import (
-    DatasetVersion,
-    dataset_version_from_manifest,
-    write_training_record,
-)
+from synthaea_ml.registry.records import DatasetVersion
 from synthaea_ml.training.config import CMDLINE_FOREST, FLOOR_TOLERANCE, RANDOM_SEED
 from synthaea_ml.training.pipeline import export_onnx
 

@@ -76,7 +76,7 @@ _BOUNDS = FeatureBounds(
     feature_names=["argv_len", "entropy"], min_values=[0.0, -0.1], max_values=[12.6, 5.25]
 )
 
-_GOLDEN_V3 = """{
+GOLDEN_V3_RECORD = """{
   "conformal_calibration": {
     "benign_baseline_rate": 1000.0,
     "calibrated_at": "2026-09-11T11:59:00+00:00",
@@ -211,14 +211,14 @@ def test_v3_record_with_every_optional_block_is_byte_identical_to_golden(
     _write_full_v3_record(tmp_path)
 
     written = (tmp_path / MODEL_RECORD_FILENAME).read_bytes().replace(b"\r\n", b"\n")
-    assert written == _GOLDEN_V3.encode("utf-8")
+    assert written == GOLDEN_V3_RECORD.encode("utf-8")
 
 
 def test_v3_golden_loads_into_the_record_that_wrote_it(tmp_path: Path) -> None:
     golden_dir, written_dir = tmp_path / "golden", tmp_path / "written"
     golden_dir.mkdir()
     written_dir.mkdir()
-    (golden_dir / MODEL_RECORD_FILENAME).write_text(_GOLDEN_V3, encoding="utf-8")
+    (golden_dir / MODEL_RECORD_FILENAME).write_text(GOLDEN_V3_RECORD, encoding="utf-8")
 
     assert load_training_record(golden_dir) == _write_full_v3_record(written_dir)
 
