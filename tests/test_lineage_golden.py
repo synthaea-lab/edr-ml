@@ -5,10 +5,10 @@ either of the two tests breaks, one implementation has drifted from the other an
 ONNX model would be scoring vectors inconsistent with its training.
 """
 
-import json
 from pathlib import Path
 
 import pytest
+from helpers import read_golden_jsonl
 
 from synthaea_ml.features.lineage import FEATURE_NAMES, extract_features
 
@@ -16,8 +16,7 @@ GOLDEN = Path(__file__).resolve().parent / "fixtures" / "lineage_golden.jsonl"
 
 
 def golden_rows() -> list[dict]:
-    with GOLDEN.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+    return read_golden_jsonl(GOLDEN)
 
 
 @pytest.mark.parametrize("row", golden_rows(), ids=lambda r: r["name"])

@@ -5,10 +5,10 @@ the two tests breaks, one implementation has drifted from the other and a model 
 the rarity feature would be scored on vectors it never saw (ADR-0020, #640).
 """
 
-import json
 from pathlib import Path
 
 import pytest
+from helpers import read_golden_jsonl
 
 from synthaea_ml.features.rarity import FEATURE_NAMES, CommonSetSnapshot, extract_features
 
@@ -16,8 +16,7 @@ GOLDEN = Path(__file__).resolve().parent / "fixtures" / "rarity_golden.jsonl"
 
 
 def golden_rows() -> list[dict]:
-    with GOLDEN.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+    return read_golden_jsonl(GOLDEN)
 
 
 def snapshot_of(row: dict) -> CommonSetSnapshot | None:

@@ -7,11 +7,11 @@ to say anything. They say nothing about detection on a real host.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
 import pytest
+from helpers import write_jsonl
 
 from synthaea_ml.evaluation import t1_lineage_gain as gain
 from synthaea_ml.features import t1
@@ -142,9 +142,7 @@ def _event(kind: str, pid: int, ppid: int, ts: int, gen: int, parent_gen: int, *
 
 
 def _capture(tmp_path: Path, events: list[dict]) -> Path:
-    path = tmp_path / "events.jsonl"
-    path.write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
-    return path
+    return write_jsonl(tmp_path / "events.jsonl", events)
 
 
 def test_the_scenarios_tree_includes_a_child_that_never_exec_d_but_not_a_bystander(

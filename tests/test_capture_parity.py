@@ -6,10 +6,10 @@ agent's `events.jsonl` and the trainer disagree on the correlation vector. Regen
 with `fixtures/generators/gen_capture_correlation_golden.py` only on a deliberate format change.
 """
 
-import json
 from pathlib import Path
 
 import pytest
+from helpers import read_golden_jsonl
 
 from synthaea_ml.data.aggregate_correlation import charger_events, vecteurs_par_pid
 
@@ -18,9 +18,7 @@ S = 1_000_000_000
 
 
 def golden_rows() -> list[dict]:
-    path = FIXTURES / "capture_correlation_golden.jsonl"
-    with path.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+    return read_golden_jsonl(FIXTURES / "capture_correlation_golden.jsonl")
 
 
 @pytest.mark.parametrize("row", golden_rows(), ids=lambda r: f"pid{r['pid']}")

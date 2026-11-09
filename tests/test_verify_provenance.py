@@ -13,11 +13,11 @@ below use the new name consistently.
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from helpers import write_baseline_dataset, write_scenario_yaml
 
 from synthaea_ml.data.manifest import write_manifest
 from synthaea_ml.export.verify_onnx import (
@@ -40,20 +40,8 @@ _END = datetime(2026, 9, 14, 11, 0, 0, tzinfo=UTC)
 
 
 def _make_baseline(dir_path: Path, *, name: str, samples: int = 3) -> Path:
-    baseline_dir = dir_path / name
-    baseline_dir.mkdir(parents=True, exist_ok=True)
     lines = [f'{{"argv": ["cmd-{i}"]}}' for i in range(samples)]
-    (baseline_dir / "baseline.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    write_manifest(
-        baseline_dir,
-        platform="linux",
-        os_version="test",
-        workload_label="dev",
-        capture_start=_START,
-        capture_end=_END,
-        hostname="testhost",
-    )
-    return baseline_dir
+    return write_baseline_dataset(dir_path / name, lines, capture_start=_START, capture_end=_END)
 
 
 def _make_model_dir_with_record(
@@ -71,12 +59,6 @@ def _make_model_dir_with_record(
         trained_at=_START,
     )
     return model_dir
-
-
-def _write_scenario_yaml(scenarios_root: Path, name: str, contents: str) -> str:
-    scenarios_root.mkdir(parents=True, exist_ok=True)
-    (scenarios_root / f"{name}.yaml").write_bytes(contents.encode("utf-8"))
-    return hashlib.sha256(contents.encode("utf-8")).hexdigest()
 
 
 # --- Legacy entry (no model_record.json) ----------------------------------
@@ -198,7 +180,7 @@ def _model_dir_with_dataset_and_replay(
     baseline_dir = _make_baseline(baselines_root, name=dataset_name)
     dv = dataset_version_from_manifest(baseline_dir, name=dataset_name)
 
-    yaml_sha = _write_scenario_yaml(scenarios_root, "beacon", "kind: beacon\n")
+    _, yaml_sha = write_scenario_yaml(scenarios_root, "beacon", "kind: beacon\n")
     expected = [ExpectedDetection(technique="T1071", rule="r", min_count=1, tolerance=0)]
     observed = [ObservedDetection(technique="T1071", rule="r", count=1)]
     replay = ScenarioReplayResult(
