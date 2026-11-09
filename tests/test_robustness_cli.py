@@ -7,7 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from synthaea_ml.evaluation.robustness_cli import _find_previous_version, main, verify_robustness
+from synthaea_ml.evaluation.robustness_cli import (
+    Gate,
+    GateFailure,
+    RobustnessThresholds,
+    evaluate_robustness_gates,
+    main,
+    previous_version,
+    render_verification,
+    verify_robustness,
+)
 from synthaea_ml.registry.training_record import (
     DatasetVersion,
     MutationTestResult,
@@ -59,7 +68,7 @@ def _create_test_record_with_robustness(
     )
 
 
-def test_find_previous_version(tmp_path: Path) -> None:
+def testprevious_version(tmp_path: Path) -> None:
     """Test finding previous version directory."""
     # Create version directories
     registry_dir = tmp_path / "cmdline-iforest-linux"
@@ -71,21 +80,21 @@ def test_find_previous_version(tmp_path: Path) -> None:
     (registry_dir / "0.3.0").mkdir()
 
     # Test finding previous patch version
-    prev = _find_previous_version(registry_dir / "0.2.1")
+    prev = previous_version(registry_dir / "0.2.1")
     assert prev == registry_dir / "0.2.0"
 
     # Test finding previous minor version
-    prev = _find_previous_version(registry_dir / "0.3.0")
+    prev = previous_version(registry_dir / "0.3.0")
     # Should find 0.2.* (latest patch in previous minor)
     assert prev is not None
     assert prev.name.startswith("0.2")
 
     # Test no previous version
-    prev = _find_previous_version(registry_dir / "0.1.0")
+    prev = previous_version(registry_dir / "0.1.0")
     assert prev is None
 
 
-def test_verify_robustness_pass(tmp_path: Path, capsys) -> None:
+def test_verify_robustness_pass(tmp_path: Path) -> None:
     """Test verify_robustness passes with good metrics."""
     model_dir = tmp_path / "model"
     model_dir.mkdir()
@@ -94,15 +103,16 @@ def test_verify_robustness_pass(tmp_path: Path, capsys) -> None:
     record_path = model_dir / "model_record.json"
     record_path.write_text(json.dumps(record_to_dict(record)), encoding="utf-8")
 
-    result = verify_robustness(model_dir, max_escape_rate=0.15, max_median_degradation=0.20)
+    result = verify_robustness(model_dir, RobustnessThresholds(0.15, 0.20))
 
-    assert result is True
-    captured = capsys.readouterr()
-    assert "PASS" in captured.out
-    assert "8.00%" in captured.out  # escape rate
+    assert result.passed
+    assert result.failures == []
+    report = render_verification(result)
+    assert "PASS" in report
+    assert "8.00%" in report  # escape rate
 
 
-def test_verify_robustness_fail_escape_rate(tmp_path: Path, capsys) -> None:
+def test_verify_robustness_fail_escape_rate(tmp_path: Path) -> None:
     """Test verify_robustness fails when escape rate exceeds threshold."""
     model_dir = tmp_path / "model"
     model_dir.mkdir()
@@ -111,15 +121,16 @@ def test_verify_robustness_fail_escape_rate(tmp_path: Path, capsys) -> None:
     record_path = model_dir / "model_record.json"
     record_path.write_text(json.dumps(record_to_dict(record)), encoding="utf-8")
 
-    result = verify_robustness(model_dir, max_escape_rate=0.15, max_median_degradation=0.20)
+    result = verify_robustness(model_dir, RobustnessThresholds(0.15, 0.20))
 
-    assert result is False
-    captured = capsys.readouterr()
-    assert "FAIL" in captured.out
-    assert "20.00%" in captured.out  # escape rate
+    assert not result.passed
+    assert result.failures == [GateFailure("test_scenario", Gate.ESCAPE_RATE, 0.20, 0.15)]
+    report = render_verification(result)
+    assert "FAIL" in report
+    assert "20.00%" in report  # escape rate
 
 
-def test_verify_robustness_regression(tmp_path: Path, capsys) -> None:
+def test_verify_robustness_regression(tmp_path: Path) -> None:
     """Test regression checking between versions."""
     registry_dir = tmp_path / "cmdline-iforest-linux"
     registry_dir.mkdir()
@@ -141,14 +152,16 @@ def test_verify_robustness_regression(tmp_path: Path, capsys) -> None:
     )
 
     # Should pass (2% increase < 5% threshold)
-    result = verify_robustness(curr_dir, no_regression=True, max_regression_increase=0.05)
-    assert result is True
-    captured = capsys.readouterr()
-    assert "Regression check" in captured.out
-    assert "8.00% → 10.00%" in captured.out
+    result = verify_robustness(
+        curr_dir, RobustnessThresholds(max_regression_increase=0.05), check_regression=True
+    )
+    assert result.passed
+    report = render_verification(result)
+    assert "Regression check" in report
+    assert "8.00% → 10.00%" in report
 
 
-def test_verify_robustness_regression_fail(tmp_path: Path, capsys) -> None:
+def test_verify_robustness_regression_fail(tmp_path: Path) -> None:
     """Test regression check fails when escape rate increases too much."""
     registry_dir = tmp_path / "cmdline-iforest-linux"
     registry_dir.mkdir()
@@ -170,10 +183,12 @@ def test_verify_robustness_regression_fail(tmp_path: Path, capsys) -> None:
     )
 
     # Should fail (12% increase > 5% threshold)
-    result = verify_robustness(curr_dir, no_regression=True, max_regression_increase=0.05)
-    assert result is False
-    captured = capsys.readouterr()
-    assert "REGRESSION" in captured.out
+    result = verify_robustness(
+        curr_dir, RobustnessThresholds(max_regression_increase=0.05), check_regression=True
+    )
+    assert not result.passed
+    assert [failure.gate for failure in result.failures] == [Gate.ESCAPE_RATE, Gate.REGRESSION]
+    assert "REGRESSION" in render_verification(result)
 
 
 # --- Pinned behavior -------------------------------------------------------------
@@ -367,14 +382,14 @@ def _make_version_dirs(registry_dir: Path, *versions: str) -> None:
 def test_previous_version_prefers_the_previous_patch(tmp_path: Path) -> None:
     _make_version_dirs(tmp_path, "0.2.5", "0.3.0", "0.3.1")
 
-    assert _find_previous_version(tmp_path / "0.3.1") == tmp_path / "0.3.0"
+    assert previous_version(tmp_path / "0.3.1") == tmp_path / "0.3.0"
 
 
 def test_previous_version_skips_a_missing_patch_to_the_previous_minor(tmp_path: Path) -> None:
     # Only patch - 1 is tried in the current minor: 0.3.0 is not found from 0.3.2.
     _make_version_dirs(tmp_path, "0.3.0", "0.3.2")
 
-    assert _find_previous_version(tmp_path / "0.3.2") is None
+    assert previous_version(tmp_path / "0.3.2") is None
 
 
 def test_previous_version_picks_one_of_several_previous_minor_patches(tmp_path: Path) -> None:
@@ -382,17 +397,62 @@ def test_previous_version_picks_one_of_several_previous_minor_patches(tmp_path: 
     # filesystem, not the highest patch. A follow-up makes this pick 0.2.1.
     _make_version_dirs(tmp_path, "0.2.0", "0.2.1", "0.3.0")
 
-    assert _find_previous_version(tmp_path / "0.3.0") in {tmp_path / "0.2.0", tmp_path / "0.2.1"}
+    assert previous_version(tmp_path / "0.3.0") in {tmp_path / "0.2.0", tmp_path / "0.2.1"}
 
 
 def test_previous_version_falls_back_to_the_previous_major(tmp_path: Path) -> None:
     _make_version_dirs(tmp_path, "0.9.0", "1.0.0")
 
-    assert _find_previous_version(tmp_path / "1.0.0") == tmp_path / "0.9.0"
+    assert previous_version(tmp_path / "1.0.0") == tmp_path / "0.9.0"
 
 
 def test_previous_version_ignores_non_semver_directories(tmp_path: Path) -> None:
     _make_version_dirs(tmp_path, "0.1.0", "latest", "0.2")
 
-    assert _find_previous_version(tmp_path / "latest") is None
-    assert _find_previous_version(tmp_path / "0.2") is None
+    assert previous_version(tmp_path / "latest") is None
+    assert previous_version(tmp_path / "0.2") is None
+
+
+def test_check_regression_is_the_new_name_of_no_regression(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    model_dir = _write_record(
+        tmp_path / "registry" / "0.1.0", _create_test_record_with_robustness(escape_rate=0.08)
+    )
+
+    _, old_name = _run_verify(monkeypatch, capsys, "--model-dir", str(model_dir), "--no-regression")
+    _, new_name = _run_verify(
+        monkeypatch, capsys, "--model-dir", str(model_dir), "--check-regression"
+    )
+
+    assert new_name == old_name
+    assert "regression check" in new_name
+
+
+def test_evaluate_robustness_gates_lists_thresholds_then_regressions() -> None:
+    previous = _with_cards(
+        _create_test_record_with_robustness("a", 0.01),
+        _create_test_record_with_robustness("b", 0.01),
+    )
+    record = _with_cards(
+        _create_test_record_with_robustness("a", 0.20),
+        _create_test_record_with_robustness("b", 0.02, median_score_degradation=0.25),
+        _create_test_record_with_robustness("c", 0.50),
+    )
+
+    failures = evaluate_robustness_gates(record, previous, RobustnessThresholds())
+
+    assert [(f.scenario_name, f.gate) for f in failures] == [
+        ("a", Gate.ESCAPE_RATE),
+        ("b", Gate.MEDIAN_DEGRADATION),
+        ("c", Gate.ESCAPE_RATE),
+        ("a", Gate.REGRESSION),
+    ]
+    assert failures[-1].observed == pytest.approx(0.19)
+    assert failures[-1].limit == 0.05
+
+
+def test_evaluate_robustness_gates_skips_regressions_without_a_previous_record() -> None:
+    record = _create_test_record_with_robustness(escape_rate=0.10)
+
+    assert evaluate_robustness_gates(record, None, RobustnessThresholds()) == []

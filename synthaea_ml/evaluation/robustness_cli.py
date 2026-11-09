@@ -18,147 +18,303 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from synthaea_ml.registry.codec import load_training_record
+from synthaea_ml.registry.records import RobustnessCard, TrainingRecord
+
+SemanticVersion = tuple[int, int, int]
 
 
-def _find_previous_version(model_dir: Path) -> Path | None:
-    """Find the previous version directory for regression checking.
-
-    Args:
-        model_dir: Current model version directory.
-
-    Returns:
-        Path to previous version directory, or None if not found.
-    """
-    # Parse version from directory name (e.g., "0.3.0" from ".../0.3.0")
-    current_version_str = model_dir.name
-    try:
-        # Simple version parsing (assumes semantic versioning)
-        parts = current_version_str.split(".")
-        if len(parts) != 3:
-            return None
-
-        major, minor, patch = map(int, parts)
-
-        # Try to find previous versions (decrement patch, then minor, then major)
-        registry_dir = model_dir.parent
-
-        # Try patch-1, then minor-1, then major-1
-        candidates = []
-        if patch > 0:
-            candidates.append(f"{major}.{minor}.{patch-1}")
-        if minor > 0:
-            # Find highest patch in previous minor
-            prev_minor_pattern = f"{major}.{minor-1}.*"
-            for entry in registry_dir.glob(prev_minor_pattern):
-                if entry.is_dir() and entry != model_dir:
-                    candidates.append(entry.name)
-        if major > 0:
-            # Find highest version in previous major
-            prev_major_pattern = f"{major-1}.*"
-            for entry in registry_dir.glob(prev_major_pattern):
-                if entry.is_dir() and entry != model_dir:
-                    candidates.append(entry.name)
-
-        # Return first existing candidate
-        for candidate in candidates:
-            prev_dir = registry_dir / candidate
-            if prev_dir.exists() and prev_dir.is_dir():
-                return prev_dir
-
-    except (ValueError, IndexError):
+def _parse_semantic_version(name: str) -> SemanticVersion | None:
+    """``(major, minor, patch)`` of a ``"0.3.0"``-style directory name, or None."""
+    parts = name.split(".")
+    if len(parts) != 3:
         return None
+    try:
+        major, minor, patch = (int(part) for part in parts)
+    except ValueError:
+        return None
+    return major, minor, patch
 
+
+def _previous_version_candidates(model_dir: Path, version: SemanticVersion) -> Iterator[Path]:
+    """Directories that may hold the previous version, most preferred first.
+
+    The previous patch, then every ``major.(minor-1).*`` entry, then every
+    ``(major-1).*`` entry, each glob in the order the filesystem yields it.
+    """
+    major, minor, patch = version
+    registry_dir = model_dir.parent
+    if patch > 0:
+        yield registry_dir / f"{major}.{minor}.{patch - 1}"
+    if minor > 0:
+        yield from registry_dir.glob(f"{major}.{minor - 1}.*")
+    if major > 0:
+        yield from registry_dir.glob(f"{major - 1}.*")
+
+
+def previous_version(model_dir: Path) -> Path | None:
+    """The registry version directory to check ``model_dir`` against for regressions.
+
+    None when ``model_dir`` is not named ``major.minor.patch`` or no candidate exists.
+    """
+    version = _parse_semantic_version(model_dir.name)
+    if version is None:
+        return None
+    for candidate in _previous_version_candidates(model_dir, version):
+        if candidate.is_dir() and candidate != model_dir:
+            return candidate
     return None
+
+
+@dataclass(frozen=True)
+class RobustnessThresholds:
+    """Limits the ``verify`` gate holds a model's robustness cards to."""
+
+    max_escape_rate: float = 0.15
+    max_median_degradation: float = 0.20
+    max_regression_increase: float = 0.05
+    """Largest allowed escape-rate increase over the previous version (absolute)."""
+
+
+class Gate(StrEnum):
+    """A robustness check a scenario can fail."""
+
+    ESCAPE_RATE = "escape_rate"
+    MEDIAN_DEGRADATION = "median_degradation"
+    REGRESSION = "regression"
+
+
+@dataclass(frozen=True)
+class GateFailure:
+    """One scenario over one limit: ``observed`` exceeded ``limit``."""
+
+    scenario_name: str
+    gate: Gate
+    observed: float
+    limit: float
+
+
+@dataclass(frozen=True)
+class ScenarioRegression:
+    """A scenario's escape rate against the previous version's, when it had one."""
+
+    scenario_name: str
+    previous_escape_rate: float | None
+    escape_rate: float
+    failure: GateFailure | None
+
+
+@dataclass(frozen=True)
+class RegressionCheck:
+    """The comparison against the previous version, or why it could not run."""
+
+    previous_version: str | None = None
+    scenarios: tuple[ScenarioRegression, ...] = ()
+    warning: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioVerdict:
+    """A robustness card and the thresholds it failed."""
+
+    card: RobustnessCard
+    failures: tuple[GateFailure, ...]
+
+
+@dataclass(frozen=True)
+class RobustnessVerification:
+    """Outcome of ``verify_robustness``; ``render_verification`` turns it into text."""
+
+    model_dir: Path
+    scenarios: tuple[ScenarioVerdict, ...]
+    regression: RegressionCheck | None
+    """None when the regression check was not requested (or there were no cards)."""
+
+    @property
+    def failures(self) -> list[GateFailure]:
+        """Every failed gate: thresholds per scenario, then regressions."""
+        threshold_failures = [f for verdict in self.scenarios for f in verdict.failures]
+        compared = self.regression.scenarios if self.regression is not None else ()
+        return threshold_failures + _regression_failures(compared)
+
+    @property
+    def passed(self) -> bool:
+        """True when there are cards and no gate failed."""
+        return bool(self.scenarios) and not self.failures
+
+
+def _threshold_failures(
+    card: RobustnessCard, thresholds: RobustnessThresholds
+) -> tuple[GateFailure, ...]:
+    checks = (
+        (Gate.ESCAPE_RATE, card.escape_rate, thresholds.max_escape_rate),
+        (Gate.MEDIAN_DEGRADATION, card.median_score_degradation, thresholds.max_median_degradation),
+    )
+    return tuple(
+        GateFailure(card.scenario_name, gate, observed, limit)
+        for gate, observed, limit in checks
+        if observed > limit
+    )
+
+
+def _scenario_regression(
+    card: RobustnessCard,
+    previous_card: RobustnessCard | None,
+    thresholds: RobustnessThresholds,
+) -> ScenarioRegression:
+    if previous_card is None:
+        return ScenarioRegression(card.scenario_name, None, card.escape_rate, None)
+    increase = card.escape_rate - previous_card.escape_rate
+    failure = None
+    if increase > thresholds.max_regression_increase:
+        failure = GateFailure(
+            card.scenario_name, Gate.REGRESSION, increase, thresholds.max_regression_increase
+        )
+    return ScenarioRegression(
+        card.scenario_name, previous_card.escape_rate, card.escape_rate, failure
+    )
+
+
+def _regression_failures(scenarios: Iterable[ScenarioRegression]) -> list[GateFailure]:
+    return [scenario.failure for scenario in scenarios if scenario.failure is not None]
+
+
+def _compare_with_previous(
+    record: TrainingRecord, previous: TrainingRecord, thresholds: RobustnessThresholds
+) -> tuple[ScenarioRegression, ...]:
+    """Each current card against the previous version's card of the same scenario name."""
+    previous_cards = {card.scenario_name: card for card in previous.robustness_cards}
+    return tuple(
+        _scenario_regression(card, previous_cards.get(card.scenario_name), thresholds)
+        for card in record.robustness_cards
+    )
+
+
+def evaluate_robustness_gates(
+    record: TrainingRecord,
+    previous: TrainingRecord | None,
+    thresholds: RobustnessThresholds,
+) -> list[GateFailure]:
+    """Every gate ``record`` fails; regressions are checked only when ``previous`` is given."""
+    failures = [
+        f for card in record.robustness_cards for f in _threshold_failures(card, thresholds)
+    ]
+    if previous is not None:
+        failures += _regression_failures(_compare_with_previous(record, previous, thresholds))
+    return failures
+
+
+def _check_regression(
+    model_dir: Path, record: TrainingRecord, thresholds: RobustnessThresholds
+) -> RegressionCheck:
+    previous_dir = previous_version(model_dir)
+    if previous_dir is None:
+        return RegressionCheck(warning="No previous version found for regression check")
+    try:
+        previous = load_training_record(previous_dir)
+    except (FileNotFoundError, ValueError) as error:
+        return RegressionCheck(
+            warning=f"Could not load previous version for regression check: {error}"
+        )
+    return RegressionCheck(
+        previous_version=previous_dir.name,
+        scenarios=_compare_with_previous(record, previous, thresholds),
+    )
 
 
 def verify_robustness(
     model_dir: Path,
-    max_escape_rate: float = 0.15,
-    max_median_degradation: float = 0.20,
-    no_regression: bool = False,
-    max_regression_increase: float = 0.05,
-) -> bool:
-    """Verify robustness metrics against thresholds.
+    thresholds: RobustnessThresholds | None = None,
+    check_regression: bool = False,
+) -> RobustnessVerification:
+    """Check the robustness cards of ``model_dir/model_record.json`` against ``thresholds``.
 
-    Args:
-        model_dir: Registry version directory containing model_record.json.
-        max_escape_rate: Maximum allowed escape rate (default 0.15 = 15%).
-        max_median_degradation: Maximum allowed median score degradation.
-        no_regression: If True, check for regression vs previous version.
-        max_regression_increase: Maximum allowed escape rate increase vs previous
-            version (default 0.05 = 5 percentage points).
+    With ``check_regression``, also compare each scenario's escape rate with the previous
+    registry version (``previous_version``). A missing or unreadable previous version is a
+    warning, not a failure.
 
-    Returns:
-        True if all checks pass, False otherwise.
+    Raises:
+        FileNotFoundError: If ``model_dir`` has no model record.
+        ValueError: If the model record cannot be decoded.
     """
+    thresholds = thresholds or RobustnessThresholds()
     record = load_training_record(model_dir)
+    scenarios = tuple(
+        ScenarioVerdict(card, _threshold_failures(card, thresholds))
+        for card in record.robustness_cards
+    )
+    regression = None
+    if check_regression and scenarios:
+        regression = _check_regression(model_dir, record, thresholds)
+    return RobustnessVerification(model_dir, scenarios, regression)
 
-    if not record.robustness_cards:
-        print(f"ERROR: No robustness cards found in {model_dir}")
-        return False
 
-    print(f"Verifying robustness for {len(record.robustness_cards)} scenario(s)...")
+def _render_failure(failure: GateFailure) -> str:
+    if failure.gate is Gate.ESCAPE_RATE:
+        return f"FAIL: escape rate {failure.observed:.2%} > {failure.limit:.2%}"
+    if failure.gate is Gate.MEDIAN_DEGRADATION:
+        return f"FAIL: median degradation {failure.observed:+.3f} > {failure.limit:.3f}"
+    return (
+        f"REGRESSION: escape rate increased by "
+        f"{failure.observed:.2%} (max allowed: {failure.limit:.2%})"
+    )
 
-    all_passed = True
-    for card in record.robustness_cards:
-        print(f"\n{card.scenario_name}:")
-        print(f"  Escape rate: {card.escape_rate:.2%}")
-        print(f"  Median degradation: {card.median_score_degradation:+.3f}")
-        print(f"  Worst case degradation: {card.worst_case_degradation:+.3f}")
 
-        if card.escape_rate > max_escape_rate:
-            print(f"  FAIL: escape rate {card.escape_rate:.2%} > {max_escape_rate:.2%}")
-            all_passed = False
+def _render_scenario(verdict: ScenarioVerdict) -> list[str]:
+    card = verdict.card
+    return [
+        "",
+        f"{card.scenario_name}:",
+        f"  Escape rate: {card.escape_rate:.2%}",
+        f"  Median degradation: {card.median_score_degradation:+.3f}",
+        f"  Worst case degradation: {card.worst_case_degradation:+.3f}",
+        *(f"  {_render_failure(failure)}" for failure in verdict.failures),
+    ]
 
-        if card.median_score_degradation > max_median_degradation:
-            print(
-                f"  FAIL: median degradation {card.median_score_degradation:+.3f} "
-                f"> {max_median_degradation:.3f}"
-            )
-            all_passed = False
 
-    if no_regression:
-        prev_dir = _find_previous_version(model_dir)
-        if prev_dir:
-            try:
-                prev_record = load_training_record(prev_dir)
-                print(f"\nRegression check against previous version: {prev_dir.name}")
+def _render_scenario_regression(scenario: ScenarioRegression) -> list[str]:
+    if scenario.previous_escape_rate is None:
+        return [f"  {scenario.scenario_name}: no previous baseline (new scenario)"]
+    increase = scenario.escape_rate - scenario.previous_escape_rate
+    lines = [
+        f"  {scenario.scenario_name}: {scenario.previous_escape_rate:.2%} → "
+        f"{scenario.escape_rate:.2%} (Δ {increase:+.2%})"
+    ]
+    if scenario.failure is not None:
+        lines.append(f"    {_render_failure(scenario.failure)}")
+    return lines
 
-                # Match scenarios by name
-                prev_cards_by_name = {c.scenario_name: c for c in prev_record.robustness_cards}
 
-                for card in record.robustness_cards:
-                    prev_card = prev_cards_by_name.get(card.scenario_name)
-                    if prev_card:
-                        escape_increase = card.escape_rate - prev_card.escape_rate
-                        print(
-                            f"  {card.scenario_name}: {prev_card.escape_rate:.2%} → "
-                            f"{card.escape_rate:.2%} (Δ {escape_increase:+.2%})"
-                        )
+def _render_regression(regression: RegressionCheck) -> list[str]:
+    if regression.warning is not None:
+        return ["", f"WARNING: {regression.warning}"]
+    lines = ["", f"Regression check against previous version: {regression.previous_version}"]
+    for scenario in regression.scenarios:
+        lines += _render_scenario_regression(scenario)
+    return lines
 
-                        if escape_increase > max_regression_increase:
-                            print(
-                                f"    REGRESSION: escape rate increased by "
-                                f"{escape_increase:.2%} (max allowed: {max_regression_increase:.2%})"
-                            )
-                            all_passed = False
-                    else:
-                        print(f"  {card.scenario_name}: no previous baseline (new scenario)")
 
-            except (FileNotFoundError, ValueError) as e:
-                print(f"\nWARNING: Could not load previous version for regression check: {e}")
-        else:
-            print("\nWARNING: No previous version found for regression check")
-
-    if all_passed:
-        print("\nPASS: All robustness checks passed")
-    else:
-        print("\nFAIL: Robustness checks failed")
-
-    return all_passed
+def render_verification(verification: RobustnessVerification) -> str:
+    """The ``verify`` command's report for ``verification``, one line per row."""
+    if not verification.scenarios:
+        return f"ERROR: No robustness cards found in {verification.model_dir}"
+    lines = [f"Verifying robustness for {len(verification.scenarios)} scenario(s)..."]
+    for verdict in verification.scenarios:
+        lines += _render_scenario(verdict)
+    if verification.regression is not None:
+        lines += _render_regression(verification.regression)
+    verdict_line = (
+        "PASS: All robustness checks passed"
+        if verification.passed
+        else "FAIL: Robustness checks failed"
+    )
+    lines += ["", verdict_line]
+    return "\n".join(lines)
 
 
 def generate_report(model_dir: Path, output: Path | None = None) -> None:
@@ -219,6 +375,7 @@ def generate_report(model_dir: Path, output: Path | None = None) -> None:
 
 
 def main() -> None:
+    """Run the ``verify`` or ``report`` command; ``verify`` exits 1 when a gate fails."""
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -243,9 +400,14 @@ def main() -> None:
         help="Maximum allowed median degradation (default: 0.20)",
     )
     verify_parser.add_argument(
+        "--check-regression",
         "--no-regression",
+        dest="check_regression",
         action="store_true",
-        help="Check for regression vs previous version",
+        help=(
+            "Check for regression vs previous version "
+            "(--no-regression is the older name of the same flag)"
+        ),
     )
     verify_parser.add_argument(
         "--max-regression-increase",
@@ -271,14 +433,14 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "verify":
-        passed = verify_robustness(
-            args.model_dir,
-            args.max_escape_rate,
-            args.max_median_degradation,
-            args.no_regression,
-            args.max_regression_increase,
+        thresholds = RobustnessThresholds(
+            max_escape_rate=args.max_escape_rate,
+            max_median_degradation=args.max_median_degradation,
+            max_regression_increase=args.max_regression_increase,
         )
-        sys.exit(0 if passed else 1)
+        verification = verify_robustness(args.model_dir, thresholds, args.check_regression)
+        print(render_verification(verification))
+        sys.exit(0 if verification.passed else 1)
     elif args.command == "report":
         generate_report(args.model_dir, args.output)
 
