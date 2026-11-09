@@ -370,6 +370,136 @@ def test_load_events_from_source(tmp_path: Path) -> None:
     assert events[2]["argv"] == ["ls", "-la"]
 
 
+# One input line -> what `_load_events_from_source` loads from it (T0, no context). The
+# expected dicts are compared with their key order, which the scorers and the record
+# snapshot rely on.
+_LOADED_FROM_LINE = [
+    pytest.param(
+        '{"type":"exec","argv":["sh","-c","id"],"cmdline":"sh -c id","pid":4}',
+        [{"argv": ["sh", "-c", "id"], "cmdline": "sh -c id", "pid": 4}],
+        id="exec-with-argv-and-cmdline",
+    ),
+    pytest.param(
+        '{"type":"exec","argv":["ls"]}',
+        [{"argv": ["ls"], "cmdline": None}],
+        id="argv-without-cmdline-keeps-a-null-cmdline",
+    ),
+    pytest.param(
+        '{"argv":["ls","-la"],"parent_comm":"bash","comm":"ls"}',
+        [{"argv": ["ls", "-la"], "cmdline": None, "parent_comm": "bash"}],
+        id="baseline-record-without-type",
+    ),
+    pytest.param(
+        '{"cmdline":"C:\\\\Windows\\\\cmd.exe /c whoami","parent_image_path":"C:\\\\x.exe"}',
+        [{"cmdline": "C:\\Windows\\cmd.exe /c whoami", "parent_image_path": "C:\\x.exe"}],
+        id="windows-cmdline-only",
+    ),
+    pytest.param('{"type":"exec","cmdline":"   "}', [], id="blank-cmdline-only"),
+    pytest.param('{"type":"exec","pid":3}', [], id="exec-without-command-line"),
+    pytest.param('{"type":"connect","pid":3,"dport":80}', [], id="not-an-exec"),
+    pytest.param(
+        json.dumps(
+            {
+                "type": "exec",
+                "meta": {"pid": 9, "timestamp_ns": 5, "process_generation": 2},
+                "argv": ["curl", "x"],
+                "parent_comm": "nginx",
+            }
+        ),
+        [
+            {
+                "argv": ["curl", "x"],
+                "cmdline": None,
+                "parent_comm": "nginx",
+                "pid": 9,
+                "process_generation": 2,
+            }
+        ],
+        id="wire-exec-nested-under-meta",
+    ),
+    pytest.param(
+        '{"type":"fork","meta":{"pid":9},"argv":["kept","raw"]}',
+        [{"argv": ["kept", "raw"], "cmdline": None}],
+        id="wire-event-of-unknown-type-stays-raw",
+    ),
+    pytest.param("", [], id="blank-line"),
+    pytest.param("   ", [], id="whitespace-line"),
+    pytest.param('{"type":"exec","argv":', [], id="torn-line"),
+    pytest.param("not json", [], id="invalid-json"),
+    pytest.param('["argv"]', [], id="json-array"),
+    pytest.param("null", [], id="json-null"),
+]
+
+
+@pytest.mark.parametrize(("line", "expected"), _LOADED_FROM_LINE)
+def test_load_events_from_source_line_by_line(
+    tmp_path: Path, line: str, expected: list[dict]
+) -> None:
+    src = tmp_path / "events.jsonl"
+    src.write_text(line + "\n", encoding="utf-8")
+
+    loaded = _load_events_from_source(src)
+
+    assert loaded == expected
+    assert [list(e) for e in loaded] == [list(e) for e in expected]
+
+
+def test_load_events_from_source_skips_bad_lines_and_keeps_the_good_ones(tmp_path: Path) -> None:
+    src = tmp_path / "events.jsonl"
+    src.write_text(
+        '{"argv":["a"]}\nnot json\n\n[1]\n{"cmdline":"b"}\n{"argv":["c"]', encoding="utf-8"
+    )
+
+    assert _load_events_from_source(src) == [{"argv": ["a"], "cmdline": None}, {"cmdline": "b"}]
+
+
+def test_load_events_from_source_keeps_a_record_with_a_raw_line_separator(
+    tmp_path: Path,
+) -> None:
+    """A raw U+2028 inside a JSON string is part of the record, not a line break: the
+    loader reads through `iter_jsonl`, which splits on newlines only."""
+    src = tmp_path / "events.jsonl"
+    src.write_text('{"argv":["echo","a\u2028b"]}\n', encoding="utf-8")
+
+    assert _load_events_from_source(src) == [{"argv": ["echo", "a\u2028b"], "cmdline": None}]
+
+
+def test_t1_context_comes_after_the_loaded_keys_and_only_on_records_with_a_pid(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "events.jsonl"
+    _write_jsonl(
+        src,
+        [
+            {"type": "exec", "pid": 7, "ts_ns": 1, "argv": ["sh"], "parent_comm": "nginx"},
+            {"argv": ["no-pid"]},
+            {"type": "connect", "pid": 7, "ts_ns": 2, "daddr_v4": [1, 2, 3, 4], "dport": 80},
+        ],
+    )
+
+    with_pid, without_pid = _load_events_from_source(src, with_context=True)
+
+    assert list(with_pid) == ["argv", "cmdline", "parent_comm", "pid", "correlation_features"]
+    assert list(without_pid) == ["argv", "cmdline"]
+
+
+def test_t1_window_holds_typed_events_with_a_pid_only(tmp_path: Path) -> None:
+    """A connect with no `type` or no `pid` is not part of the correlation window."""
+    src = tmp_path / "events.jsonl"
+    _write_jsonl(
+        src,
+        [
+            {"type": "exec", "pid": 7, "ts_ns": 1, "argv": ["sh"]},
+            {"pid": 7, "ts_ns": 2, "daddr_v4": [1, 2, 3, 4], "dport": 80},
+            {"type": "connect", "ts_ns": 2, "daddr_v4": [1, 2, 3, 4], "dport": 80},
+        ],
+    )
+
+    (loaded,) = _load_events_from_source(src, with_context=True)
+
+    assert loaded["correlation_features"][1] == 0.0
+
+
 def test_load_events_from_source_missing_file() -> None:
     """Test loading from missing file raises FileNotFoundError."""
     with pytest.raises(FileNotFoundError):
