@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from synthaea_ml.data.canonical import argv_from_record
+from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
 
 
 def main() -> None:
@@ -40,34 +41,26 @@ def main() -> None:
 
     seen: set[tuple[str, ...]] = set()
     argv_list: list[list[str]] = []
-    n_lines = 0
+    n_records = 0
     n_exec = 0
 
-    with args.events_file.open(encoding="utf-8", errors="replace") as f:
-        for lineno, line in enumerate(f, 1):
-            line = line.strip()
-            if not line:
-                continue
-            n_lines += 1
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError as e:
-                print(f"[warn] line {lineno}: {e}", file=sys.stderr)
-                continue
+    for event in iter_jsonl(
+        args.events_file, on_invalid=InvalidLine.WARN, encoding_errors="replace"
+    ):
+        n_records += 1
+        if event.get("type") != "exec":
+            continue
 
-            if event.get("type") != "exec":
-                continue
+        n_exec += 1
+        argv = argv_from_record(event)
+        if not argv:
+            continue
 
-            n_exec += 1
-            argv = argv_from_record(event)
-            if not argv:
-                continue
-
-            key = tuple(argv)
-            if key in seen:
-                continue
-            seen.add(key)
-            argv_list.append(argv)
+        key = tuple(argv)
+        if key in seen:
+            continue
+        seen.add(key)
+        argv_list.append(argv)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as f:
@@ -75,7 +68,7 @@ def main() -> None:
             f.write(json.dumps({"argv": argv}) + "\n")
 
     print(
-        f"[info] {n_lines} lines read, {n_exec} exec events, "
+        f"[info] {n_records} records read, {n_exec} exec events, "
         f"{len(argv_list)} unique command lines → {args.out}"
     )
 
