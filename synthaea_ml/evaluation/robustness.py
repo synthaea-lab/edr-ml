@@ -1,22 +1,22 @@
 """Robustness evaluation runner (issue #45).
 
-Applies mutators to scenario events, scores original vs mutated, and generates
-RobustnessCard with escape rate and degradation metrics. Mirrors the pattern
-of scenario_replay.py but for adversarial evaluation rather than functional
-detection.
+Applies mutators to scenario events, scores original vs mutated, and generates a
+RobustnessCard with escape rate and degradation metrics. Mirrors the pattern of
+scenario_replay.py but for adversarial evaluation rather than functional detection.
 
 Flow:
-1. Load scenario expected_detections
-2. Extract source events from scenario artifacts (stub for now)
-3. Apply each mutator at light/medium/heavy
-4. Score original vs mutated (stub for now - needs model integration)
-5. Compute metrics (escape_rate, degradations)
+1. Load the scenario's expected_detections.
+2. Choose the events under test: the exec records of an events source when one is given,
+   otherwise one synthetic malicious event per expected detection.
+3. Apply each mutator of the tier at light/medium/heavy and score original vs mutated.
+4. Aggregate the results into the card (escape_rate, degradations).
 """
 
 from __future__ import annotations
 
 import json
 import statistics
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -30,33 +30,18 @@ from synthaea_ml.evaluation.scenario_replay import load_expected_detections
 from synthaea_ml.features import correlation, t1
 from synthaea_ml.features.cmdline import extract_features
 from synthaea_ml.hashing import sha256_file
-from synthaea_ml.registry.records import MutationTestResult, RobustnessCard
+from synthaea_ml.registry.records import ExpectedDetection, MutationTestResult, RobustnessCard
+
+# Every mutator runs at each intensity, in this order: the LCG draws depend on it.
+_INTENSITIES = ("light", "medium", "heavy")
 
 
-def _score_cmdline(model: Any, cmdline: str, threshold: float) -> float:
-    """Score one command line using the model.
+def _score_cmdline(model: Any, cmdline: str) -> float:
+    """Anomaly score of one command line (NUL-separated tokens).
 
-    Args:
-        model: Trained model (sklearn IsolationForest with decision_function).
-        cmdline: Command-line string (NUL-separated tokens).
-        threshold: Model threshold for detection.
-
-    Returns:
-        Anomaly score (IsolationForest: negative = more anomalous, positive = benign).
+    IsolationForest convention: negative = more anomalous, positive = benign.
     """
-    features = extract_features(cmdline)
-    # IsolationForest.decision_function returns negative for anomalies
-    score = model.decision_function([features])[0]
-    return float(score)
-
-
-# The T1 vector layout lives in `synthaea_ml.features.t1`, shared with the trainer.
-T1_FEATURE_COUNT = t1.FEATURE_COUNT
-
-
-def _t1_features(record: dict[str, Any]) -> list[float]:
-    """The 17-feature T1 vector for one exec record (see `synthaea_ml.features.t1`)."""
-    return t1.extract_features(record)
+    return float(model.decision_function([extract_features(cmdline)])[0])
 
 
 def _score_record(model: Any, record: dict[str, Any], tier: str) -> float:
@@ -66,14 +51,14 @@ def _score_record(model: Any, record: dict[str, Any], tier: str) -> float:
     is not in the T1 vector (ADR-0034), so no lineage mutator runs against it.
     """
     if tier == "T1":
-        expected = getattr(model, "n_features_in_", T1_FEATURE_COUNT)
-        if expected != T1_FEATURE_COUNT:
+        expected = getattr(model, "n_features_in_", t1.FEATURE_COUNT)
+        if expected != t1.FEATURE_COUNT:
             raise ValueError(
-                f"T1 robustness needs a model trained on {T1_FEATURE_COUNT} features "
+                f"T1 robustness needs a model trained on {t1.FEATURE_COUNT} features "
                 f"(cmdline + correlation); this model expects {expected}"
             )
-        return float(model.decision_function([_t1_features(record)])[0])
-    return _score_cmdline(model, ml_cmdline_from_record(record), 0.0)
+        return float(model.decision_function([t1.extract_features(record)])[0])
+    return _score_cmdline(model, ml_cmdline_from_record(record))
 
 
 def _select_mutators_for_tier(tier: str) -> list[Mutator]:
@@ -86,6 +71,7 @@ def _select_mutators_for_tier(tier: str) -> list[Mutator]:
         List of mutator instances.
 
     Raises:
+        NotImplementedError: For "T2", which has no mutators yet.
         ValueError: If tier is invalid.
     """
     if tier == "T0":
@@ -103,9 +89,10 @@ def _select_mutators_for_tier(tier: str) -> list[Mutator]:
 def run_robustness_evaluation(
     model: Any,
     scenario_yaml: Path,
+    *,
     tier: str = "T0",
     mutation_seed: int = 42,
-    threshold: float | None = None,
+    threshold: float = 0.0,
     events_source: Path | None = None,
 ) -> RobustnessCard:
     """Run adversarial evaluation on one scenario.
@@ -115,123 +102,119 @@ def run_robustness_evaluation(
         scenario_yaml: Path to scenario yaml (e.g., ../scenarios/scenarios/beacon.yaml).
         tier: Mutation tier ("T0", "T1", "T2"). Default "T0".
         mutation_seed: Seed for deterministic PRNG. Default 42.
-        threshold: Model threshold for detection. If None, uses model's default.
-        events_source: Optional path to events.jsonl or baseline.jsonl file.
-            If provided, loads real events from this file. If None, uses
-            synthetic events based on expected_detections techniques.
+        threshold: Detection threshold: a score at or below it is detected. Default 0.0,
+            the IsolationForest decision boundary.
+        events_source: Optional events.jsonl or baseline.jsonl holding MALICIOUS events
+            that match the scenario's expected_detections (escape rate is only meaningful
+            on originally-detected samples). When it is None, missing, or holds no exec
+            record, one synthetic event per expected detection is used instead.
 
     Returns:
         RobustnessCard with mutation results and aggregate metrics.
 
     Raises:
-        FileNotFoundError: If scenario yaml or events_source is missing.
-        ValueError: If tier is invalid or scenario has no detections.
-
-    Notes:
-        Prefers real events from events_source if provided. Falls back to
-        synthetic events if events_source is None (for testing without captures).
+        FileNotFoundError: If the scenario yaml is missing.
+        NotImplementedError: If tier is "T2".
+        ValueError: If tier is invalid, the scenario has no detections, no mutation
+            produced a result, or no event was originally detected.
     """
     scenario_name, expected = load_expected_detections(scenario_yaml)
     mutators = _select_mutators_for_tier(tier)
-
     if not expected:
         raise ValueError(f"scenario {scenario_name!r} has no expected_detections")
 
-    # Determine threshold
-    if threshold is None:
-        # For IsolationForest, threshold is typically 0 (negative = anomaly)
-        threshold = 0.0
+    events = _events_under_test(expected, tier, events_source)
+    results = _mutation_results(
+        model, events, mutators, rng=LCG(seed=mutation_seed), threshold=threshold, tier=tier
+    )
+    return _card_from_results(scenario_name, scenario_yaml, results, threshold)
 
-    rng = LCG(seed=mutation_seed)
-    results: list[MutationTestResult] = []
 
-    # Load events from source or generate synthetic malicious events
-    # IMPORTANT: events_source should contain MALICIOUS events matching the
-    # scenario's expected_detections, NOT benign baseline events. Escape rate
-    # is only meaningful when computed on originally-detected samples.
+def _events_under_test(
+    expected: Sequence[ExpectedDetection], tier: str, events_source: Path | None
+) -> list[dict[str, Any]]:
+    """The exec records of `events_source`, or one synthetic event per expected detection
+    when there is no source, it does not exist or it holds no exec record."""
     if events_source and events_source.exists():
-        source_events = _load_events_from_source(
-            events_source, with_context=(tier == "T1")
-        )
-        # Use all loaded events (no arbitrary limit)
-        events_to_test = source_events if source_events else []
+        loaded = _load_events_from_source(events_source, with_context=(tier == "T1"))
+        if loaded:
+            return loaded
+    return [_create_synthetic_event_for_detection(d.technique, tier) for d in expected]
 
-        if not events_to_test:
-            # No events loaded, fall back to synthetic
-            events_to_test = [
-                _create_synthetic_event_for_detection(d.technique, tier) for d in expected
-            ]
-    else:
-        # Generate synthetic malicious events for each expected detection
-        # This is the default path - synthetic events are guaranteed to be
-        # anomalous (score < threshold), making escape_rate meaningful
-        events_to_test = [
-            _create_synthetic_event_for_detection(d.technique, tier) for d in expected
-        ]
 
-    # Run mutations on each event
-    for event in events_to_test:
+def _mutation_results(
+    model: Any,
+    events: Sequence[dict[str, Any]],
+    mutators: Sequence[Mutator],
+    *,
+    rng: LCG,
+    threshold: float,
+    tier: str,
+) -> list[MutationTestResult]:
+    """Score every event against each mutator at each intensity.
+
+    The loop nesting (event, then mutator, then intensity) fixes the order of the LCG
+    draws, which the recorded `seed` of each result exposes: do not reorder it. A
+    mutation that raises `ValueError` (empty argv, invalid record) is skipped.
+    """
+    results: list[MutationTestResult] = []
+    for event in events:
         original_score = _score_record(model, event, tier)
-
         for mutator in mutators:
-            for intensity in ["light", "medium", "heavy"]:
+            for intensity in _INTENSITIES:
                 try:
-                    mutated_record = mutator.mutate(event, intensity, rng)
-                    mutated_score = _score_record(model, mutated_record, tier)
-
-                    score_delta = mutated_score - original_score
-                    escaped = mutated_score > threshold and original_score <= threshold
-
-                    results.append(
-                        MutationTestResult(
-                            mutation_class=mutator.mutation_class_name(),
-                            intensity=intensity,
-                            original_score=original_score,
-                            mutated_score=mutated_score,
-                            score_delta=score_delta,
-                            threshold=threshold,
-                            escaped=escaped,
-                            seed=rng.state,
-                        )
-                    )
+                    mutated_score = _score_record(model, mutator.mutate(event, intensity, rng), tier)
                 except ValueError:
-                    # Skip mutations that fail (e.g., empty argv, invalid record)
                     continue
+                results.append(
+                    MutationTestResult(
+                        mutation_class=mutator.mutation_class_name(),
+                        intensity=intensity,
+                        original_score=original_score,
+                        mutated_score=mutated_score,
+                        score_delta=mutated_score - original_score,
+                        threshold=threshold,
+                        escaped=mutated_score > threshold and original_score <= threshold,
+                        seed=rng.state,
+                    )
+                )
+    return results
 
+
+def _card_from_results(
+    scenario_name: str,
+    scenario_yaml: Path,
+    results: list[MutationTestResult],
+    threshold: float,
+) -> RobustnessCard:
+    """Aggregate the mutation results of one scenario into its card.
+
+    The escape rate counts only the originally-detected results (`original_score <=
+    threshold`): an event the model never detected cannot escape. The degradations
+    cover every result; a positive delta moved the score toward benign, so the worst
+    case is the largest delta.
+    """
     if not results:
         raise ValueError(f"no mutation results for scenario {scenario_name!r}")
 
-    # Compute aggregate metrics
-    # CRITICAL: escape_rate is only meaningful on originally-detected samples
-    # (original_score <= threshold). Filter to those before computing.
     originally_detected = [r for r in results if r.original_score <= threshold]
-
     if not originally_detected:
-        # No originally-detected samples means escape_rate is undefined
-        # This can happen if events_source contains only benign events
+        # Typically an events_source of benign baseline events instead of malicious ones.
         raise ValueError(
             f"no originally-detected samples for scenario {scenario_name!r} "
             f"(all {len(results)} samples had original_score > {threshold}). "
             f"Are you using malicious events, not benign baseline?"
         )
 
-    escape_rate = sum(r.escaped for r in originally_detected) / len(originally_detected)
-
-    # Score degradations: positive delta means mutation moved toward benign (worse)
-    # Compute on all results, not just originally-detected
     score_deltas = [r.score_delta for r in results]
-    median_degradation = statistics.median(score_deltas)
-    # FIXED: worst case is MAX (most degradation toward benign), not MIN
-    worst_case_degradation = max(score_deltas)
-
     return RobustnessCard(
         scenario_name=scenario_name,
         scenario_yaml_sha256=sha256_file(scenario_yaml),
         tested_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         mutation_results=results,
-        escape_rate=escape_rate,
-        median_score_degradation=median_degradation,
-        worst_case_degradation=worst_case_degradation,
+        escape_rate=sum(r.escaped for r in originally_detected) / len(originally_detected),
+        median_score_degradation=statistics.median(score_deltas),
+        worst_case_degradation=max(score_deltas),
     )
 
 
