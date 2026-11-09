@@ -1,30 +1,32 @@
-# ml/datasets
+# datasets
 
-Benign baselines are committed; raw captures and labeled traces stay on disk.
+Benign baselines the models are trained and evaluated on. Baselines are committed; raw
+captures (`captures/`) and labeled traces (`labeled/`) stay on local disk and are ignored by
+Git.
 
-| Path | In git | Contents |
-| --- | --- | --- |
-| `baselines/` | yes | Benign baselines built from captures (`python -m synthaea_ml.data.capture_to_baseline`), one directory per capture |
-| `captures/` | no (`.gitignore`) | Raw agent JSONL telemetry captures, named `<platform>-<host>-<date>/` |
-| `labeled/` | no (`.gitignore`) | Labeled traces (scenario runs with ground truth) for supervised eval |
+## Layout
+
+Each baseline is one directory, built from a capture with
+`python -m synthaea_ml.data.capture_to_baseline`:
+
+```text
+baselines/<platform>-<host>-<date>[-vN]/
+    baseline.jsonl     one sample per line
+    manifest.json      provenance, workload label, time range, sample count and SHA-256
+```
+
+`python -m synthaea_ml.data.manifest write` creates the manifest and
+`python -m synthaea_ml.data.manifest verify <dir>` checks it. A model record binds to the
+manifest's `sample_sha256`, so a baseline cannot change under a model that names it. The host
+is recorded as a truncated hash of its hostname, never the hostname itself.
 
 ## Committed baselines
 
-A baseline directory follows the manifest convention of `synthaea_ml.data.manifest`:
-
-    baselines/<platform>-<host>-<date>[-vN]/
-        baseline.jsonl     # one sample per line
-        manifest.json      # provenance, workload label, time range, sample count + sha256
-
-The manifest is written and checked with `python -m synthaea_ml.data.manifest {write,verify}`;
-its `sample_sha256` is what a registry `model_record.json` binds a model to, so a baseline
-cannot change under a model that names it.
-
 | Directory | Manifest | Samples |
-| --- | --- | --- |
-| `linux-wsl2-solkapc-2026-09-09-v2/` | yes | 423 (Linux argv) |
-| `linux-wsl2-solkapc-2026-09-09/` | no — predates the manifest convention | 47 (Linux argv, `baseline_benign.jsonl`) |
-| `windows-solkapc-2026-09-08/` | no — predates the manifest convention | 313 (Windows cmdline, `baseline_benign.jsonl`) |
+| --- | --- | ---: |
+| `linux-wsl2-solkapc-2026-09-09-v2/` | yes | 423 Linux argv |
+| `linux-wsl2-solkapc-2026-09-09/` | no | 47 Linux argv |
+| `windows-solkapc-2026-09-08/` | no | 313 Windows command lines |
 
-The two unmanifested directories keep the sensor's original file name and have no
-recorded provenance, time range or workload label.
+The two unmanifested baselines predate the manifest convention. They keep the original file
+name `baseline_benign.jsonl` and carry no recorded provenance, so trainers do not accept them.

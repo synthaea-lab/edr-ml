@@ -1,81 +1,120 @@
-# ml — The ML Space
+# Synthaea ML
 
-Everything about the learned half of the detection stack lives here: datasets, feature
-definitions, model training, calibration, evaluation, and export to ONNX for on-device
-inference by `crates/ml`. This is a first-class part of the product, not a scripts
-folder — the thesis is that a learned model raises the cost of evasion through
-generalization, and that only holds if this pipeline is reproducible and measured.
+The machine-learning pipeline of [Synthaea](https://github.com/synthaea-lab), an open-source
+EDR/XDR. This repository builds the models the endpoint agent scores events with: it holds the
+benign datasets, the feature definitions, training, calibration, evaluation, and export to ONNX
+for on-device inference by the agent's [`ml` crate](https://github.com/synthaea-lab/agent/tree/main/crates/ml).
 
-## Inference tiers
+The premise is that a learned model raises the cost of evasion by generalizing beyond exact
+signatures. That only holds if the pipeline is reproducible and every model is measured, so
+both are enforced here rather than left to convention.
 
-| Tier | Runs | Model | Trained from |
+> **Status: alpha (0.1.0).** The pipeline, its features and its evaluation gates are in place.
+> No model in the registry meets the ship criteria yet: the two committed models are
+> reference-only and serve as verification inputs.
+
+## How it fits
+
+Models are grouped in tiers by what they score and where they run.
+
+| Tier | Runs | Scores | Trained from |
 | --- | --- | --- | --- |
-| T0 — event scoring | on-device | per-event anomaly (e.g. cmdline features, Isolation Forest) | benign captures per platform |
-| T1 — behavior | on-device | aggregated per-entity behavior scoring | scenario + benign captures |
-| T2 — correlation | on-device | case scorer over correlated detections (with Bayesian LLR calibration) | labeled correlation traces |
-| T3 — fleet | server-side | rarity / per-tenant baselines | fleet telemetry (control plane) |
+| T0, event | on the endpoint | a single event, such as a command line (Isolation Forest) | benign captures, one model per platform |
+| T1, behavior | on the endpoint | one process incarnation: command line and correlated activity | captures of normal activity |
+| T2, correlation | on the endpoint | correlated detections, with Bayesian likelihood-ratio calibration | labeled correlation traces |
+| T3, fleet | on the control plane | rarity and per-site baselines | fleet telemetry |
 
-T0–T2 export to ONNX and ship to agents as signed data via canary rings, never embedded
-in the binary (ADR-0002); T3 lives with the control plane and never ships to endpoints.
-T3 also closes the loop: it curates per-site benign corpora from fleet telemetry, from
-which T0–T2 are recalibrated per deployment, under safety constraints of their own.
+T0 to T2 are exported to ONNX and delivered to agents as content, separate from the agent
+binary. T3 stays with the [control plane](https://github.com/synthaea-lab/server) and never
+runs on endpoints; it also curates per-site benign corpora from which the endpoint tiers are
+recalibrated for a deployment.
+
+The [architecture overview](https://www.synthaea.com/en/docs/architecture) places these tiers
+among the other detection layers.
+
+## Principles
+
+1. **Feature parity is tested, not assumed.** Every feature is defined twice, here in Python
+   and in the agent in Rust, and both sides assert against the same golden vectors. The same
+   applies to score attribution and to the ONNX inference path, so the feature vector, its
+   explanation and its score are each pinned to the Python reference.
+2. **No model ships without an evaluation record.** Each registry version carries a model
+   card and a machine-readable record: training data provenance, metrics, the false-positive
+   rate against benign baselines, scenario-replay results, and a robustness card that measures
+   score degradation under attacker-style mutations of known-bad samples.
+3. **Every model is reproducible.** A registry model can be rebuilt from the dataset versions
+   and hyperparameters it records. Baselines are content-hashed, so the data cannot change
+   under a model that names it.
+
+## Getting started
+
+Requires Python 3.11 or later and Git.
+
+```bash
+git clone https://github.com/synthaea-lab/ml
+cd ml
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+On Windows, create the environment with `py -m venv .venv` and activate it with
+`.venv\Scripts\activate`; the `python -m` commands below are the same on every platform.
+
+Verify every model in the registry under ONNX Runtime (output schema, finite and
+deterministic scores, label and score agreement, and dataset provenance):
+
+```bash
+python -m synthaea_ml.export.verify_onnx
+```
+
+Check that a committed baseline still matches its manifest:
+
+```bash
+python -m synthaea_ml.data.manifest verify datasets/baselines/linux-wsl2-solkapc-2026-09-09-v2
+```
+
+Train a T0 command-line model on that baseline. The trainer verifies the manifest first, then
+writes `model.onnx`, `model_metadata.json` and `model_record.json` to the output directory:
+
+```bash
+python -m synthaea_ml.training.train_linux --dataset datasets/baselines/linux-wsl2-solkapc-2026-09-09-v2 --output-dir out/cmdline-iforest-linux
+```
+
+Every command-line entry point runs as `python -m synthaea_ml.<package>.<module>` and
+documents its arguments with `--help`.
 
 ## Repository layout
 
-| Path | Purpose |
+| Path | Contents |
 | --- | --- |
-| `synthaea_ml/` | The Python package — see subpackage docstrings; CLIs run as `python -m synthaea_ml.<pkg>.<module>` |
-| `synthaea_ml/features/` | Feature definitions — the Rust parity seam (fixtures shared with `crates/ml`) |
-| `synthaea_ml/data/` | Capture parsing, dataset building, baseline manifests |
-| `synthaea_ml/training/` | Training entry points per tier/platform, shared training config |
-| `synthaea_ml/calibration/` | Bayesian LLR calibration, conformal FP-budget thresholds, OOD guards |
-| `synthaea_ml/evaluation/` | Metrics, FP governance, scenario-replay and robustness evaluation |
-| `synthaea_ml/registry/` | Registry file layout and the machine-readable model record |
-| `synthaea_ml/export/` | ONNX parity verification (`verify_onnx`) |
-| `datasets/baselines/` | Committed benign baselines, one directory per capture, manifested per `synthaea_ml.data.manifest`; raw captures and labeled traces stay on disk ([datasets/README.md](datasets/README.md)) |
-| `registry/` | Versioned model artifacts + model cards — what ships ([registry/README.md](registry/README.md)) |
-| `reports/calibration/` | LLR calibration reports, the receipts behind calibrated constants ([reports/README.md](reports/README.md)) |
-| `tests/` | Unit tests |
-| `tests/fixtures/` | Rust/Python parity golden data; `generators/` holds the scripts that write it ([tests/fixtures/README.md](tests/fixtures/README.md)) |
-
-## The three rules
-
-1. **Feature parity is enforced, not hoped for.** Every feature has a definition here
-   and in `crates/ml`; both test against the same fixture vectors. Drift is a CI
-   failure, and drift in production is a silent model lobotomy. The same discipline
-   covers score attribution (`tests/attribution_reference.py` vs `crates/ml`'s forest
-   walk, pinned by `attribution_golden.json`) and the inference path itself
-   (`crates/ml`'s `ort` scorer vs onnxruntime, pinned by `scorer_golden.json`): the
-   Rust feature vector, its explanation, and the score the shipped runtime computes
-   from it are each locked to the Python reference.
-2. **No model ships without an evaluation record.** Each registry entry carries a model
-   card: training data provenance, metrics, FP rate against benign baselines, and the
-   scenario-replay results — plus a **robustness card**: measured score degradation
-   under attacker-style mutations of known-bad samples. FP
-   governance and robustness regression are both release gates.
-3. **Reproducibility.** A registry model can be rebuilt from its recorded dataset
-   versions and config. Exploratory work is never load-bearing (see Contributing).
-
-Migrated from `old/ml` (issue #14): features, training entry points, LLR calibration,
-capture/aggregation, `verify_onnx` (now a registry-wide oracle:
-`python -m synthaea_ml.export.verify_onnx`), and the Rust/Python parity fixtures under
-`tests/fixtures/`. The two old models live in `registry/` with reference-only cards —
-they predate the evaluation gates and do not meet ship criteria.
-
-## Tests and sibling checkouts
-
-`ruff check .`, `mypy` and `pytest tests` run from this directory (`pip install -e ".[dev]"`
-first: it pins the linters CI uses). Some tests read files owned by
-public sibling repositories: the agent's Rust parity fixtures (`crates/ml/tests/fixtures`
-in synthaea-lab/agent) and the scenario sidecars and capture scripts of
-synthaea-lab/scenarios (`scenarios/`, `ml-capture/`; model records bind to the yaml
-sidecars by content hash, ADR-0009). Check them out next to this repo as `agent/` and
-`scenarios/` (alongside `server/` and `rules/` if you have them), or point `SYNTHAEA_ROOT`
-at their parent. A test whose sibling is absent is skipped; `SYNTHAEA_REQUIRE_SIBLINGS=1`
-(set by CI) makes it fail instead.
+| [`synthaea_ml/`](synthaea_ml) | The Python package |
+| `synthaea_ml/features/` | Feature definitions, mirrored by the agent's Rust implementation |
+| `synthaea_ml/data/` | Capture parsing, dataset building and baseline manifests |
+| `synthaea_ml/training/` | Training entry points per tier and platform, and their shared configuration |
+| `synthaea_ml/calibration/` | Likelihood-ratio calibration and conformal false-positive thresholds |
+| `synthaea_ml/evaluation/` | Scenario replay, robustness evaluation and attacker-style mutations |
+| `synthaea_ml/registry/` | Registry layout and the model record |
+| `synthaea_ml/export/` | ONNX verification |
+| [`datasets/`](datasets/README.md) | Committed benign baselines and their manifests |
+| [`registry/`](registry/README.md) | Versioned models with their model cards |
+| [`reports/`](reports/README.md) | Calibration reports behind calibrated constants |
+| [`tests/`](tests/fixtures/README.md) | Unit tests and the Rust/Python parity fixtures |
 
 ## Contributing
 
-Exploratory work (notebooks, one-off scripts) stays out of this repository until it
-matters: anything load-bearing graduates into `synthaea_ml/` with tests. Nothing
-exploratory is imported by the package or run by CI.
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to set up the
+sibling checkouts the parity tests need, run the checks, and change a feature or a fixture.
+Every commit carries a Developer Certificate of Origin sign-off (`git commit -s`); there is no
+CLA. The [project contributing guide](https://www.synthaea.com/en/docs/contributing) covers
+the other repositories.
+
+## Security
+
+Do not report vulnerabilities in public issues. Use GitHub private vulnerability reporting on
+this repository, as described in the
+[security policy](https://github.com/synthaea-lab/.github/blob/main/SECURITY.md).
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
