@@ -23,6 +23,7 @@ python tests/fixtures/generators/gen_features_golden.py
 | `t1_events.jsonl`, `t1_golden.jsonl` | `gen_t1_golden.py` | `test_t1_parity.py`, `crates/ml/tests/t1_golden.rs` |
 | `mutation_parity_golden.jsonl` | `gen_mutation_parity_golden.py` | `test_mutation_parity.py` |
 | `lineage_golden.jsonl` | no generator in this repository | `test_lineage_golden.py`, `crates/ml/tests/lineage_golden.rs` |
+| `behavior_golden.jsonl` | `gen_behavior_golden.py` | `test_behavior_golden.py` (Rust consumer not written yet, see ML-015) |
 
 ## Goldens written into the agent
 
