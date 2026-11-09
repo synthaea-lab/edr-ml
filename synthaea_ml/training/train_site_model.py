@@ -38,6 +38,7 @@ import numpy as np
 from skl2onnx import to_onnx
 from sklearn.ensemble import IsolationForest
 
+from synthaea_ml.data.baselines import load_cmdlines, unique_in_order
 from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.manifest import DEFAULT_BASELINE_FILENAME
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
@@ -60,18 +61,8 @@ def load_global_baseline(baseline_dir: Path) -> list[str]:
     if not baseline_path.exists():
         raise FileNotFoundError(f"Global baseline not found: {baseline_path}")
 
-    cmdlines: list[str] = []
-    for line in baseline_path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            cmdlines.append(ml_cmdline_from_record(json.loads(line)))
-
-    # Deduplicate
-    seen: set[str] = set()
-    unique: list[str] = []
-    for c in cmdlines:
-        if c not in seen:
-            seen.add(c)
-            unique.append(c)
+    cmdlines = load_cmdlines(baseline_dir, "linux")
+    unique = unique_in_order(cmdlines)
 
     print(f"Global baseline: {len(cmdlines)} entries -> {len(unique)} unique")
     return unique
@@ -91,13 +82,7 @@ def load_site_corpus(corpus_path: Path) -> list[str]:
                 cmdline = ml_cmdline_from_record(record["event"])
                 cmdlines.append(cmdline)
 
-    # Deduplicate
-    seen: set[str] = set()
-    unique: list[str] = []
-    for c in cmdlines:
-        if c not in seen:
-            seen.add(c)
-            unique.append(c)
+    unique = unique_in_order(cmdlines)
 
     print(f"Site corpus: {len(cmdlines)} entries -> {len(unique)} unique")
     return unique
@@ -105,20 +90,8 @@ def load_site_corpus(corpus_path: Path) -> list[str]:
 
 def combine_corpora(global_corpus: list[str], site_corpus: list[str]) -> list[str]:
     """Combine global + site corpus with deduplication."""
-    seen: set[str] = set()
-    combined: list[str] = []
-
-    # Add global corpus first
-    for c in global_corpus:
-        if c not in seen:
-            seen.add(c)
-            combined.append(c)
-
-    # Add site corpus (dedup against global)
-    for c in site_corpus:
-        if c not in seen:
-            seen.add(c)
-            combined.append(c)
+    # Global samples first, then the site samples not already in it.
+    combined = unique_in_order([*global_corpus, *site_corpus])
 
     print(f"Combined corpus: {len(combined)} unique samples ({len(global_corpus)} global + {len(site_corpus)} site)")
     return combined
