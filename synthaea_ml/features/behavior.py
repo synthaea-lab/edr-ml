@@ -21,6 +21,8 @@ Any change to a feature must be mirrored in both files.
 
 from __future__ import annotations
 
+from typing import Any
+
 # ── Rust mirror constants ──────────────────────────────────────────────────────
 
 O_ACCMODE: int = 0o3
@@ -65,7 +67,7 @@ def _is_write(flags: int) -> bool:
 # ── Main extraction ────────────────────────────────────────────────────────────
 
 
-def extract_behavior_features(events: list[dict]) -> list[float]:
+def extract_behavior_features(events: list[dict[str, Any]]) -> list[float]:
     """Extracts the 9 behavioral features from a PID's event sequence within
     its sliding window.
 

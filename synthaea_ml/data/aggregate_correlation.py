@@ -40,6 +40,7 @@ from pathlib import Path
 
 from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
 from synthaea_ml.data.manifest import CORRELATION_DATASET_FILENAME
+from synthaea_ml.data.records import CorrelationVector, FlatEvent
 from synthaea_ml.data.wire import RAW_EVENT_TYPES, flatten_wire_event
 from synthaea_ml.features.correlation import FEATURE_NAMES, extract_features
 
@@ -58,10 +59,10 @@ LEGACY_OUT_PATH = Path(__file__).parents[1] / "training" / "data" / CORRELATION_
 reads them. Deprecated: it lies inside the package source tree."""
 
 
-def charger_events(path: Path) -> list[dict]:
+def charger_events(path: Path) -> list[FlatEvent]:
     """Loads the usable events from events.jsonl (exec/connect/file_open), flattened by
     `flatten_wire_event` to the shape `correlation.py` expects."""
-    events: list[dict] = []
+    events: list[FlatEvent] = []
     try:
         for raw in iter_jsonl(path, on_invalid=InvalidLine.WARN):
             e = flatten_wire_event(raw)
@@ -76,13 +77,15 @@ def charger_events(path: Path) -> list[dict]:
     return events
 
 
-def vecteurs_par_pid(events: list[dict], window_ns: int, min_events: int) -> list[dict]:
+def vecteurs_par_pid(
+    events: list[FlatEvent], window_ns: int, min_events: int
+) -> list[CorrelationVector]:
     """One `extract_features` per PID, over its window at its last appearance."""
-    par_pid: dict[int, list[dict]] = defaultdict(list)
+    par_pid: dict[int, list[FlatEvent]] = defaultdict(list)
     for e in events:
         par_pid[e["pid"]].append(e)
 
-    out: list[dict] = []
+    out: list[CorrelationVector] = []
     for pid, pid_events in sorted(par_pid.items()):
         pid_events.sort(key=lambda e: e["ts_ns"])
         last_ts = pid_events[-1]["ts_ns"]

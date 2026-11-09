@@ -26,6 +26,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from synthaea_ml.data.records import FlatEvent
+
 # Wire tags as `crates/schema::Event` serializes them (serde `rename_all = "snake_case"`
 # on the `FileOpen`/`NetworkFlow` variants): distinct from `correlation.py`'s "fileopen"
 # (see below). `network_flow` added by ADR-0008 (NetworkFlow absorbed into T2's
@@ -33,7 +35,7 @@ from typing import Any
 RAW_EVENT_TYPES = ("exec", "connect", "file_open", "network_flow")
 
 
-def flatten_wire_event(raw: dict[str, Any]) -> dict[str, Any] | None:
+def flatten_wire_event(raw: dict[str, Any]) -> FlatEvent | None:
     """Translates one wire event (`crates/schema::Event` JSON: identity nested under
     `meta`, `daddr` a single address string) into the flat shape `correlation.py` was
     written against (`pid`/`ts_ns` at top level, `fileopen` tag, `daddr_v4` as a
@@ -44,7 +46,7 @@ def flatten_wire_event(raw: dict[str, Any]) -> dict[str, Any] | None:
     meta = raw.get("meta")
     if event_type not in RAW_EVENT_TYPES or meta is None:
         return None
-    e: dict[str, Any] = {
+    e: FlatEvent = {
         "type": "fileopen" if event_type == "file_open" else event_type,
         "pid": meta["pid"],
         "ts_ns": meta["timestamp_ns"],

@@ -18,10 +18,11 @@ import statistics
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
+from synthaea_ml.data.records import FlatEvent
 from synthaea_ml.data.wire import flatten_wire_event
 from synthaea_ml.evaluation.mutations.base import Mutator
 from synthaea_ml.evaluation.mutations.cmdline import ALL_T0_MUTATORS
@@ -253,7 +254,11 @@ def _load_events_from_source(
     ]
     events = [view for record in records if (view := _exec_view(record)) is not None]
     if with_context:
-        window = [record for record in records if "pid" in record and "type" in record]
+        # Records with a pid and a type are the flat events `correlation` reads.
+        window = cast(
+            "list[FlatEvent]",
+            [record for record in records if "pid" in record and "type" in record],
+        )
         _attach_correlation(events, window)
     return events
 
@@ -264,7 +269,9 @@ def _flat_record(record: dict[str, Any]) -> dict[str, Any]:
     into the T1 tier. Baseline and hand-built records are already flat, and a wire event
     of a type the flattener does not know is kept as it is."""
     if "meta" in record:
-        return flatten_wire_event(record) or record
+        flat = flatten_wire_event(record)
+        # A `FlatEvent` is a plain dict at run time: the record is returned as the flattener built it.
+        return cast("dict[str, Any]", flat) if flat is not None else record
     return record
 
 
@@ -289,7 +296,7 @@ def _exec_view(record: dict[str, Any]) -> dict[str, Any] | None:
     return view
 
 
-def _attach_correlation(events: list[dict[str, Any]], window: list[dict[str, Any]]) -> None:
+def _attach_correlation(events: list[dict[str, Any]], window: list[FlatEvent]) -> None:
     """Add `correlation_features` to every exec view that has a pid, computed over the
     whole `window` and filtered by the view's `(pid, process_generation)`."""
     for event in events:

@@ -117,28 +117,12 @@ ignore_missing_imports = true
 #
 # Untyped `dict`/`list` for wire events, flat events and corpus records.
 [[tool.mypy.overrides]]
-module = [
-    "synthaea_ml.calibration.calibrate_llr",
-    "synthaea_ml.data.aggregate_correlation",
-    "synthaea_ml.data.canonical",
-    "synthaea_ml.features.combined",
-    "synthaea_ml.features.correlation",
-    "synthaea_ml.features.lineage",
-]
+module = "synthaea_ml.calibration.calibrate_llr"
 disable_error_code = ["type-arg"]
 
 [[tool.mypy.overrides]]
 module = "synthaea_ml.features.behavior"
-disable_error_code = ["type-arg", "no-untyped-call"]
-
-[[tool.mypy.overrides]]
-module = "synthaea_ml.evaluation.mutations.prng"
-disable_error_code = ["type-arg", "no-untyped-def"]
-
-# Optional mapping keys passed where a str is required.
-[[tool.mypy.overrides]]
-module = "synthaea_ml.evaluation.mutations.lineage"
-disable_error_code = ["arg-type"]
+disable_error_code = ["no-untyped-call"]
 
 [[tool.mypy.overrides]]
 module = "synthaea_ml.training.train_site_rarity"

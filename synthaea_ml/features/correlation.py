@@ -23,6 +23,8 @@ or `O_CREAT`) happens here, exactly mirroring `schema::has_write_intent` on the 
 (`features/behavior.py` applies the same test).
 """
 
+from synthaea_ml.data.records import FlatEvent
+
 # ── Rust mirror constants (POSIX flags) ───────────────────────────────────────
 
 O_ACCMODE = 0o3
@@ -42,7 +44,7 @@ FEATURE_NAMES = [
 ]
 
 
-def _is_file_write(event: dict) -> bool:
+def _is_file_write(event: FlatEvent) -> bool:
     """Mirror of `schema::has_write_intent` (Rust, the ONE definition): a `fileopen`
     whose access mode is `O_WRONLY`/`O_RDWR`, or that carries `O_CREAT`. The access
     mode is a 2-bit *field* (`O_ACCMODE`), not independent bits — the invalid `0o3`
@@ -65,7 +67,9 @@ def same_generation(recorded: int | None, wanted: int | None) -> bool:
     return recorded is None or wanted is None or recorded == wanted
 
 
-def events_for_pid(events: list[dict], pid: int, generation: int | None = None) -> list[dict]:
+def events_for_pid(
+    events: list[FlatEvent], pid: int, generation: int | None = None
+) -> list[FlatEvent]:
     """The events of one process incarnation: Python mirror of `EventBus::events_for_pid`.
 
     Records carry the stamp under `process_generation` (the `EventMeta` field name).
@@ -78,7 +82,7 @@ def events_for_pid(events: list[dict], pid: int, generation: int | None = None) 
 
 
 def extract_features(
-    events: list[dict], pid: int, generation: int | None = None
+    events: list[FlatEvent], pid: int, generation: int | None = None
 ) -> list[float]:
     """`events`: all events of a correlation window (not only those of the requested pid —
     the pid filtering happens here, like `EventBus::events_for_pid` on the Rust side).
