@@ -1,5 +1,4 @@
-"""Characterization of the two wire-event translators (`data.aggregate_correlation.flatten_wire_event`,
-`calibration.calibrate_llr._normalize_event`).
+"""Characterization of the two wire-event translators (`synthaea_ml.data.wire`).
 
 `normalize_for_behavior` (the LLR calibration's view) had no test. These cases pin its
 current output on NAT and Host-Only captures, and pin the points where it differs from
@@ -10,8 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from synthaea_ml.calibration.calibrate_llr import _normalize_event as normalize_for_behavior
-from synthaea_ml.data.aggregate_correlation import flatten_wire_event
+from synthaea_ml.data.wire import flatten_wire_event, normalize_for_behavior
 from synthaea_ml.features.behavior import extract_behavior_features
 
 META = {"pid": 7, "timestamp_ns": 100}
@@ -102,6 +100,17 @@ def test_a_nat_private_destination_is_internal_only_with_octets() -> None:
     assert correlation_view[-1] == 1.0
 
 
+def test_an_ipv6_destination_is_skipped_only_when_is_ipv6_is_kept() -> None:
+    """`flatten_wire_event` drops `is_ipv6`, so an IPv6 destination would be read as an
+    external IPv4 one."""
+    v6 = {"type": "connect", "meta": META, "daddr": "2001:db8::1", "dport": 443, "is_ipv6": True}
+    behavior = extract_behavior_features([normalize_for_behavior(e) for e in (EXEC, v6)])
+    flattened = [flatten_wire_event(e) for e in (EXEC, v6)]
+    correlation_view = extract_behavior_features([e for e in flattened if e is not None])
+    assert behavior[-1] == 0.0
+    assert correlation_view[-1] == 1.0
+
+
 def test_flatten_wire_event_cannot_read_a_host_only_connect() -> None:
     with pytest.raises(KeyError, match="daddr"):
         flatten_wire_event(HOST_ONLY_CONNECT)
@@ -112,3 +121,10 @@ def test_flatten_wire_event_requires_the_pid_and_drops_what_behavior_keeps() -> 
         flatten_wire_event({"type": "exec", "meta": {}, "cmdline": "sh"})
     assert flatten_wire_event({"type": "process_exit", "meta": META}) is None
     assert flatten_wire_event({"type": "exec", "pid": 1, "ts_ns": 2}) is None
+
+
+def test_the_old_import_path_still_resolves_to_the_same_flattener() -> None:
+    from synthaea_ml.data import aggregate_correlation, wire
+
+    assert aggregate_correlation.flatten_wire_event is wire.flatten_wire_event
+    assert aggregate_correlation.RAW_EVENT_TYPES is wire.RAW_EVENT_TYPES

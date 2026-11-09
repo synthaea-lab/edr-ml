@@ -30,46 +30,11 @@ from collections import defaultdict
 from pathlib import Path
 
 from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
+from synthaea_ml.data.wire import RAW_EVENT_TYPES, flatten_wire_event
 from synthaea_ml.features.correlation import FEATURE_NAMES, extract_features
 
-# Wire tags as `crates/schema::Event` serializes them (serde `rename_all = "snake_case"`
-# on the `FileOpen`/`NetworkFlow` variants): distinct from `correlation.py`'s "fileopen"
-# (see below). `network_flow` added by ADR-0008 (NetworkFlow absorbed into T2's
-# daddr/dport sets alongside `connect`).
-RAW_EVENT_TYPES = ("exec", "connect", "file_open", "network_flow")
-
-
-def flatten_wire_event(raw: dict) -> dict | None:
-    """Translates one wire event (`crates/schema::Event` JSON: identity nested under
-    `meta`, `daddr` a single address string) into the flat shape `correlation.py` was
-    written against (`pid`/`ts_ns` at top level, `fileopen` tag, `daddr_v4` as a
-    hashable destination key — the address family is never read by `extract_features`,
-    only used for counting distinct destinations, so the raw string is kept verbatim
-    inside a 1-element list rather than actually split into octets)."""
-    event_type = raw.get("type")
-    meta = raw.get("meta")
-    if event_type not in RAW_EVENT_TYPES or meta is None:
-        return None
-    e: dict = {
-        "type": "fileopen" if event_type == "file_open" else event_type,
-        "pid": meta["pid"],
-        "ts_ns": meta["timestamp_ns"],
-    }
-    # The process incarnation (#590) and, on exec, the lineage and command line the T1
-    # tier scores (#617): kept when the wire event carries them, absent otherwise, so a
-    # capture without them flattens exactly as it always did.
-    if meta.get("process_generation") is not None:
-        e["process_generation"] = meta["process_generation"]
-    if event_type == "exec":
-        for key in ("argv", "cmdline", "image_path", "parent_comm", "parent_image_path"):
-            if raw.get(key) is not None:
-                e[key] = raw[key]
-    if event_type in ("connect", "network_flow"):
-        e["daddr_v4"] = [raw["daddr"]]
-        e["dport"] = raw["dport"]
-    elif event_type == "file_open":
-        e["flags"] = raw["flags"]
-    return e
+# Re-exported: callers imported the wire translator from here before `data/wire.py`.
+__all__ = ["RAW_EVENT_TYPES", "charger_events", "flatten_wire_event", "main", "vecteurs_par_pid"]
 
 
 def charger_events(path: Path) -> list[dict]:
