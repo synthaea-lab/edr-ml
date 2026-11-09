@@ -453,6 +453,17 @@ def test_load_events_from_source_skips_bad_lines_and_keeps_the_good_ones(tmp_pat
     assert _load_events_from_source(src) == [{"argv": ["a"], "cmdline": None}, {"cmdline": "b"}]
 
 
+def test_load_events_from_source_keeps_a_record_with_a_raw_line_separator(
+    tmp_path: Path,
+) -> None:
+    """A raw U+2028 inside a JSON string is part of the record, not a line break: the
+    loader reads through `iter_jsonl`, which splits on newlines only."""
+    src = tmp_path / "events.jsonl"
+    src.write_text('{"argv":["echo","a\u2028b"]}\n', encoding="utf-8")
+
+    assert _load_events_from_source(src) == [{"argv": ["echo", "a\u2028b"], "cmdline": None}]
+
+
 def test_t1_context_comes_after_the_loaded_keys_and_only_on_records_with_a_pid(
     tmp_path: Path,
 ) -> None:

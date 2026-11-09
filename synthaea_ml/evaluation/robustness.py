@@ -14,7 +14,6 @@ Flow:
 
 from __future__ import annotations
 
-import json
 import statistics
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -22,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from synthaea_ml.data.canonical import ml_cmdline_from_record
+from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
 from synthaea_ml.data.wire import flatten_wire_event
 from synthaea_ml.evaluation.mutations.base import Mutator
 from synthaea_ml.evaluation.mutations.cmdline import ALL_T0_MUTATORS
@@ -34,6 +34,11 @@ from synthaea_ml.registry.records import ExpectedDetection, MutationTestResult, 
 
 # Every mutator runs at each intensity, in this order: the LCG draws depend on it.
 _INTENSITIES = ("light", "medium", "heavy")
+
+# Fields of an exec record kept beside its command line: the lineage the T1 tier scores
+# and the lineage mutators rewrite, and the process identity its correlation context is
+# filtered by.
+_EXEC_CONTEXT_KEYS = ("parent_comm", "parent_image_path", "pid", "process_generation")
 
 
 def _score_cmdline(model: Any, cmdline: str) -> float:
@@ -223,6 +228,8 @@ def _load_events_from_source(
 ) -> list[dict[str, Any]]:
     """Load exec events from events.jsonl or baseline.jsonl file.
 
+    Lines that are blank, not JSON or not a JSON object are skipped silently.
+
     Args:
         events_source: Path to JSONL file containing events.
         with_context: Also attach what the T1 tier scores beyond the command line:
@@ -241,51 +248,55 @@ def _load_events_from_source(
     if not events_source.exists():
         raise FileNotFoundError(f"events_source not found: {events_source}")
 
-    window: list[dict[str, Any]] = []
-    events: list[dict[str, Any]] = []
-    for line in events_source.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(record, dict):
-            continue
-        # The agent's own events.jsonl nests identity under `meta`; baseline and
-        # hand-built sources are already flat. Normalize the former so real captures
-        # carry their pid, incarnation and lineage into the T1 tier.
-        if "meta" in record:
-            record = flatten_wire_event(record) or record
-        if with_context and "pid" in record and "type" in record:
-            window.append(record)
-
-        # Extract exec events (type=="exec") or baseline records (have argv/cmdline)
-        is_exec = record.get("type") == "exec"
-        has_cmdline = "argv" in record or "cmdline" in record
-
-        if is_exec or has_cmdline:
-            # Normalize to baseline format (argv/cmdline at top level)
-            if "argv" in record:
-                loaded: dict[str, Any] = {"argv": record["argv"], "cmdline": record.get("cmdline")}
-            elif "cmdline" in record and record.get("cmdline", "").strip() != "":
-                # Windows: cmdline without argv
-                loaded = {"cmdline": record["cmdline"]}
-            else:
-                continue
-            for key in ("parent_comm", "parent_image_path", "pid", "process_generation"):
-                if key in record:
-                    loaded[key] = record[key]
-            events.append(loaded)
-
+    records = [
+        _flat_record(record) for record in iter_jsonl(events_source, on_invalid=InvalidLine.SKIP)
+    ]
+    events = [view for record in records if (view := _exec_view(record)) is not None]
     if with_context:
-        for loaded in events:
-            if "pid" in loaded:
-                loaded["correlation_features"] = correlation.extract_features(
-                    window, loaded["pid"], loaded.get("process_generation")
-                )
+        window = [record for record in records if "pid" in record and "type" in record]
+        _attach_correlation(events, window)
     return events
+
+
+def _flat_record(record: dict[str, Any]) -> dict[str, Any]:
+    """The record with the identity the agent's own events.jsonl nests under `meta`
+    lifted to the top level, so events the agent recorded carry their pid, incarnation and lineage
+    into the T1 tier. Baseline and hand-built records are already flat, and a wire event
+    of a type the flattener does not know is kept as it is."""
+    if "meta" in record:
+        return flatten_wire_event(record) or record
+    return record
+
+
+def _exec_view(record: dict[str, Any]) -> dict[str, Any] | None:
+    """What the robustness evaluation scores of one exec record, or None for a record
+    that is not an exec or carries no command line.
+
+    An exec is a record of type `exec` or any record with `argv` or `cmdline` (baseline
+    format). The view holds `argv` and `cmdline` (None when absent), or `cmdline` alone
+    for a Windows record without `argv`, followed by whichever of `_EXEC_CONTEXT_KEYS`
+    the record carries, in that order.
+    """
+    if record.get("type") != "exec" and "argv" not in record and "cmdline" not in record:
+        return None
+    if "argv" in record:
+        view: dict[str, Any] = {"argv": record["argv"], "cmdline": record.get("cmdline")}
+    elif record.get("cmdline", "").strip() != "":
+        view = {"cmdline": record["cmdline"]}
+    else:
+        return None
+    view.update({key: record[key] for key in _EXEC_CONTEXT_KEYS if key in record})
+    return view
+
+
+def _attach_correlation(events: list[dict[str, Any]], window: list[dict[str, Any]]) -> None:
+    """Add `correlation_features` to every exec view that has a pid, computed over the
+    whole `window` and filtered by the view's `(pid, process_generation)`."""
+    for event in events:
+        if "pid" in event:
+            event["correlation_features"] = correlation.extract_features(
+                window, event["pid"], event.get("process_generation")
+            )
 
 
 def _create_synthetic_event_for_detection(technique: str, tier: str = "T0") -> dict[str, Any]:
