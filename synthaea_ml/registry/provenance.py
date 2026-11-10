@@ -101,31 +101,53 @@ def verify_dataset_version(dataset_version: DatasetVersion, baselines_root: Path
 def locate_baseline_dir(dataset_name: str, baselines_root: Path) -> Path:
     """The directory under ``baselines_root`` holding the dataset a record names.
 
-    ``baselines_root/<name>/`` when it exists; otherwise the one directory whose manifest
-    derives that name (``default_dataset_name``). A record names a dataset after its
-    manifest, not after the directory it was captured into, and the committed baselines
-    keep their capture-session names (``linux-wsl2-solkapc-2026-09-09``, #47).
+    A directory claims the dataset when it is named after it or when its manifest derives
+    that name (``default_dataset_name``): a record names a dataset after its manifest, and
+    the committed baselines keep their capture-session directory names
+    (``linux-wsl2-solkapc-2026-09-09``, #47). Exactly one directory may claim it; the
+    exact name gets no precedence, so a second claimant is never silently ignored.
 
     Raises:
-        FileNotFoundError: If no directory holds the dataset.
-        ValueError: If several directories' manifests derive the same name, so the record
-            does not say which one it was trained on.
+        FileNotFoundError: If no directory claims the dataset.
+        ValueError: If several directories claim it, so the record does not say which one it
+            was trained on, or if a sibling's manifest cannot be read (the gate fails closed
+            rather than skip a directory that might be the one).
     """
-    named_dir = baselines_root / dataset_name
-    if named_dir.is_dir():
-        return named_dir
-    matches = [
+    claimants = _directories_claiming(dataset_name, baselines_root)
+    if not claimants:
+        raise FileNotFoundError(f"dataset {dataset_name!r} not found under {baselines_root}")
+    if len(claimants) > 1:
+        names = ", ".join(claimant.name for claimant in claimants)
+        raise ValueError(f"dataset {dataset_name!r} is ambiguous under {baselines_root}: {names}")
+    return claimants[0]
+
+
+def _directories_claiming(dataset_name: str, baselines_root: Path) -> list[Path]:
+    if not baselines_root.is_dir():
+        return []
+    return [
         candidate
         for candidate in sorted(baselines_root.iterdir())
-        if (candidate / MANIFEST_FILENAME).is_file()
-        and default_dataset_name(candidate) == dataset_name
+        if candidate.is_dir()
+        and (candidate.name == dataset_name or _manifest_derives(candidate, dataset_name))
     ]
-    if not matches:
-        raise FileNotFoundError(f"dataset {dataset_name!r} not found under {baselines_root}")
-    if len(matches) > 1:
-        names = ", ".join(match.name for match in matches)
-        raise ValueError(f"dataset {dataset_name!r} is ambiguous under {baselines_root}: {names}")
-    return matches[0]
+
+
+def _manifest_derives(candidate: Path, dataset_name: str) -> bool:
+    """True when ``candidate``'s manifest derives ``dataset_name``; False without a manifest.
+
+    Raises:
+        ValueError: If the manifest exists but cannot be read, naming the directory.
+    """
+    if not (candidate / MANIFEST_FILENAME).is_file():
+        return False
+    try:
+        return default_dataset_name(candidate) == dataset_name
+    except (ValueError, KeyError) as error:
+        raise ValueError(
+            f"cannot look up dataset {dataset_name!r}: the manifest in {candidate} "
+            f"is unreadable ({error!r})"
+        ) from error
 
 
 def _baseline_filename(baseline_dir: Path) -> str:

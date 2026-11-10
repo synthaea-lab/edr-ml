@@ -80,8 +80,8 @@ ships. For each `model.onnx` given, or every `registry/*/*/model.onnx` by defaul
    directory's `-linux` or `-windows` suffix; a model whose platform cannot be determined fails
    rather than be scored with the wrong samples.
 2. **Provenance**, through [`verify_training_record`](../synthaea_ml/registry/provenance.py):
-   - each dataset version is looked up as `datasets/baselines/<name>/`, else as the one
-     baseline directory whose manifest derives `<name>` ([datasets.md](datasets.md#dataset-names)); its samples file
+   - each dataset version is looked up as the one baseline directory named `<name>` or whose
+     manifest derives `<name>` ([datasets.md](datasets.md#dataset-names)); its samples file
      (`baseline.jsonl`, `events.jsonl` or `correlation_train.jsonl`) must still match its
      manifest, and the manifest must still carry the hash and sample count the record locked;
    - each scenario replay's sidecar is looked up as `<scenarios checkout>/scenarios/<name>.yaml`

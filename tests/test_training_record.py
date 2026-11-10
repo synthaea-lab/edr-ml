@@ -444,6 +444,43 @@ def test_verify_training_record_refuses_a_dataset_name_two_baselines_claim(
         verify_training_record(tmp_path / "model", baselines_root, tmp_path)
 
 
+def test_a_directory_named_after_the_dataset_does_not_hide_another_claimant(
+    tmp_path: Path,
+) -> None:
+    """The exact directory name gets no precedence: when another capture's manifest
+    derives the same name, the record could be bound to either, so the gate reports the
+    ambiguity instead of a misleading hash mismatch on the wrong one."""
+    baselines_root = tmp_path / "baselines"
+    capture = baselines_root / "linux-wsl2-solkapc-2026-09-11"
+    capture.mkdir(parents=True)
+    _make_baseline_with_manifest(capture, lines=['{"argv": ["ls"]}'])
+    _write_record_bound_to(capture, tmp_path / "model")
+    named = baselines_root / default_dataset_name(capture)
+    named.mkdir()
+    _make_baseline_with_manifest(named, lines=['{"argv": ["id"]}'])
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        verify_training_record(tmp_path / "model", baselines_root, tmp_path)
+
+
+def test_an_unreadable_sibling_manifest_fails_the_lookup_naming_its_directory(
+    tmp_path: Path,
+) -> None:
+    """The gate fails closed on a manifest it cannot read, since that directory might be
+    the dataset's, and says which directory to fix."""
+    baselines_root = tmp_path / "baselines"
+    capture = baselines_root / "linux-wsl2-solkapc-2026-09-11"
+    capture.mkdir(parents=True)
+    _make_baseline_with_manifest(capture, lines=['{"argv": ["ls"]}'])
+    _write_record_bound_to(capture, tmp_path / "model")
+    junk = baselines_root / "junk"
+    junk.mkdir()
+    (junk / "manifest.json").write_text("{not json", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"manifest in .*junk is unreadable"):
+        verify_training_record(tmp_path / "model", baselines_root, tmp_path)
+
+
 # --- Passing criterion (ADR-0009) ------------------------------------------
 
 
