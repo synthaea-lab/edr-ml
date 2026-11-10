@@ -79,12 +79,24 @@ def test_robustness_runs_every_scenario_in_order_with_the_seed_and_tier(
     monkeypatch.setattr(pipeline, "run_robustness_evaluation", fake)
     events = Path("events.jsonl")
     cards = pipeline.evaluate_robustness(
-        "model", [Path("a.yaml"), Path("b.yaml")], events, tier="T1"
+        _forest(), [Path("a.yaml"), Path("b.yaml")], events, tier="T1"
     )
     assert cards == ["a", "b"]
     assert [(c["tier"], c["mutation_seed"], c["events_source"]) for c in calls] == [
         ("T1", 42, events)
     ] * 2
+
+
+def test_robustness_scores_the_forest_at_its_calibrated_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+    monkeypatch.setattr(pipeline, "run_robustness_evaluation", lambda **kwargs: calls.append(kwargs))
+    forest = _forest()
+    pipeline.evaluate_robustness(forest, [Path("beacon.yaml")], None, tier="T0")
+    assert [(c["model"], c["threshold"]) for c in calls] == [
+        (forest.model, forest.calibration.threshold)
+    ]
 
 
 def test_a_failed_robustness_run_propagates_and_names_the_scenario(
@@ -95,9 +107,9 @@ def test_a_failed_robustness_run_propagates_and_names_the_scenario(
 
     monkeypatch.setattr(pipeline, "run_robustness_evaluation", fake)
     with pytest.raises(ValueError, match="boom") as raised:
-        pipeline.evaluate_robustness("model", [Path("beacon.yaml")], None, tier="T0")
+        pipeline.evaluate_robustness(_forest(), [Path("beacon.yaml")], None, tier="T0")
     assert raised.value.__notes__ == ["robustness evaluation failed for beacon.yaml"]
 
 
 def test_no_scenarios_means_no_cards() -> None:
-    assert pipeline.evaluate_robustness("model", [], None, tier="T0") == []
+    assert pipeline.evaluate_robustness(_forest(), [], None, tier="T0") == []

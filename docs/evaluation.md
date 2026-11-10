@@ -78,8 +78,8 @@ reproduced individually. A mutation that raises `ValueError` is skipped.
 ### The card
 
 For each mutation, both scores are recorded with their difference. A sample is **detected** when
-its score is at or below the threshold (default 0, the forest's decision boundary; the site rarity
-floor passes each model's calibrated threshold), and a mutation **escaped** when the original was
+its score is at or below the threshold (default 0, the forest's decision boundary; the trainers
+and the site rarity floor pass each model's calibrated threshold), and a mutation **escaped** when the original was
 detected and the mutated score is above the threshold.
 
 | Field | Meaning |
