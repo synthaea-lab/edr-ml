@@ -13,11 +13,13 @@ from synthaea_ml.data.manifest import (
     BEHAVIOR_CAPTURE_FILENAME,
     CORRELATION_DATASET_FILENAME,
     DEFAULT_BASELINE_FILENAME,
+    MANIFEST_FILENAME,
     load_manifest,
     verify_manifest,
 )
 from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.codec import load_training_record
+from synthaea_ml.registry.dataset_binding import default_dataset_name
 from synthaea_ml.registry.records import DatasetVersion, ScenarioReplayResult, compute_passed
 
 
@@ -67,21 +69,18 @@ def verify_training_record(
 
 
 def verify_dataset_version(dataset_version: DatasetVersion, baselines_root: Path) -> None:
-    """Re-verify one ``DatasetVersion`` against ``baselines_root/<name>/``: its baseline must
-    still match its manifest, and the manifest must still carry the hash and sample count
-    the record locked.
+    """Re-verify one ``DatasetVersion`` against its baseline directory (see
+    ``locate_baseline_dir``): its baseline must still match its manifest, and the manifest
+    must still carry the hash and sample count the record locked.
 
     Raises:
         FileNotFoundError: If the baseline directory, its samples file or its manifest
             is missing.
-        ValueError: If the baseline no longer matches its manifest, or the manifest's hash
-            or sample count no longer matches the record.
+        ValueError: If two directories claim the dataset's name, the baseline no longer
+            matches its manifest, or the manifest's hash or sample count no longer matches
+            the record.
     """
-    baseline_dir = baselines_root / dataset_version.name
-    if not baseline_dir.is_dir():
-        raise FileNotFoundError(
-            f"dataset {dataset_version.name!r} not found under {baselines_root}"
-        )
+    baseline_dir = locate_baseline_dir(dataset_version.name, baselines_root)
     baseline_filename = _baseline_filename(baseline_dir)
     verify_manifest(baseline_dir, baseline_filename=baseline_filename)
     current = load_manifest(baseline_dir)
@@ -97,6 +96,36 @@ def verify_dataset_version(dataset_version: DatasetVersion, baselines_root: Path
             f"training record locked {dataset_version.sample_count}, "
             f"current baseline has {current.sample_count}"
         )
+
+
+def locate_baseline_dir(dataset_name: str, baselines_root: Path) -> Path:
+    """The directory under ``baselines_root`` holding the dataset a record names.
+
+    ``baselines_root/<name>/`` when it exists; otherwise the one directory whose manifest
+    derives that name (``default_dataset_name``). A record names a dataset after its
+    manifest, not after the directory it was captured into, and the committed baselines
+    keep their capture-session names (``linux-wsl2-solkapc-2026-09-09``, #47).
+
+    Raises:
+        FileNotFoundError: If no directory holds the dataset.
+        ValueError: If several directories' manifests derive the same name, so the record
+            does not say which one it was trained on.
+    """
+    named_dir = baselines_root / dataset_name
+    if named_dir.is_dir():
+        return named_dir
+    matches = [
+        candidate
+        for candidate in sorted(baselines_root.iterdir())
+        if (candidate / MANIFEST_FILENAME).is_file()
+        and default_dataset_name(candidate) == dataset_name
+    ]
+    if not matches:
+        raise FileNotFoundError(f"dataset {dataset_name!r} not found under {baselines_root}")
+    if len(matches) > 1:
+        names = ", ".join(match.name for match in matches)
+        raise ValueError(f"dataset {dataset_name!r} is ambiguous under {baselines_root}: {names}")
+    return matches[0]
 
 
 def _baseline_filename(baseline_dir: Path) -> str:

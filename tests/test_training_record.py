@@ -387,6 +387,63 @@ def test_verify_training_record_detects_missing_baseline_dir(tmp_path: Path) -> 
         verify_training_record(model_dir, baselines_root, scenarios_root)
 
 
+def _write_record_bound_to(baseline_dir: Path, model_dir: Path) -> None:
+    """A record bound to ``baseline_dir`` under its default, manifest-derived name."""
+    model_dir.mkdir()
+    write_training_record(
+        model_dir,
+        training_script="synthaea_ml/training/train_linux.py",
+        dataset_versions=[dataset_version_from_manifest(baseline_dir)],
+        trained_at=_TRAINED_AT,
+    )
+
+
+def test_verify_training_record_finds_a_baseline_kept_under_its_capture_name(
+    tmp_path: Path,
+) -> None:
+    """The committed baselines live in capture-session directories
+    (``linux-wsl2-solkapc-2026-09-09``), not under the manifest-derived name a record
+    carries; the gate finds them through their manifest (#47)."""
+    baselines_root = tmp_path / "baselines"
+    baseline_dir = baselines_root / "linux-wsl2-solkapc-2026-09-11"
+    baseline_dir.mkdir(parents=True)
+    _make_baseline_with_manifest(baseline_dir, lines=['{"argv": ["ls"]}'])
+    _write_record_bound_to(baseline_dir, tmp_path / "model")
+
+    verify_training_record(tmp_path / "model", baselines_root, tmp_path)  # no exception
+
+
+def test_verify_training_record_still_checks_a_baseline_found_through_its_manifest(
+    tmp_path: Path,
+) -> None:
+    baselines_root = tmp_path / "baselines"
+    baseline_dir = baselines_root / "linux-wsl2-solkapc-2026-09-11"
+    baseline_dir.mkdir(parents=True)
+    _make_baseline_with_manifest(baseline_dir, lines=['{"argv": ["ls"]}'])
+    _write_record_bound_to(baseline_dir, tmp_path / "model")
+    _make_baseline_with_manifest(baseline_dir, lines=['{"argv": ["ls"]}', '{"argv": ["id"]}'])
+
+    with pytest.raises(ValueError, match="hash mismatch"):
+        verify_training_record(tmp_path / "model", baselines_root, tmp_path)
+
+
+def test_verify_training_record_refuses_a_dataset_name_two_baselines_claim(
+    tmp_path: Path,
+) -> None:
+    """Two captures of the same host, label and day derive the same name; the record
+    cannot say which one it was trained on, so the gate fails instead of guessing."""
+    baselines_root = tmp_path / "baselines"
+    first = baselines_root / "linux-wsl2-solkapc-2026-09-11"
+    second = baselines_root / "linux-wsl2-solkapc-2026-09-11-v2"
+    for baseline_dir in (first, second):
+        baseline_dir.mkdir(parents=True)
+        _make_baseline_with_manifest(baseline_dir, lines=['{"argv": ["ls"]}'])
+    _write_record_bound_to(first, tmp_path / "model")
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        verify_training_record(tmp_path / "model", baselines_root, tmp_path)
+
+
 # --- Passing criterion (ADR-0009) ------------------------------------------
 
 
