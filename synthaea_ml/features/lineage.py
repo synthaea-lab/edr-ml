@@ -13,6 +13,9 @@ shell→binary from suspicious paths (dropper).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 # Shell interpreters (Unix and Windows)
 SHELL_COMMS = [
     "bash",
@@ -109,7 +112,7 @@ def matches_path_ci(path: str | None, needles: list[str]) -> bool:
     return any(needle.lower() in path_lower for needle in needles)
 
 
-def extract_features(event: dict) -> list[float]:
+def extract_features(event: Mapping[str, Any]) -> list[float]:
     """Extract 6 lineage features from an ExecEvent.
 
     Input event dict has optional keys:

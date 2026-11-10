@@ -35,6 +35,7 @@ from synthaea_ml.registry.records import (
     ScenarioReplayResult,
     compute_passed,
 )
+from synthaea_ml.timestamps import format_utc
 
 
 def load_expected_detections(scenario_yaml: Path) -> tuple[str, list[ExpectedDetection]]:
@@ -143,7 +144,7 @@ def run_replay(
     return ScenarioReplayResult(
         scenario_name=scenario_name,
         scenario_yaml_sha256=sha256_file(scenario_yaml),
-        run_at=run_at or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        run_at=run_at or format_utc(datetime.now(UTC)),
         environment=environment or detect_environment(),
         expected_detections=expected,
         observed_detections=observed,

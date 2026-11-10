@@ -44,6 +44,14 @@ def _platform_of(record: dict[str, Any]) -> str | None:
     return None
 
 
+def _for_platform(
+    pools: dict[str, list[str]], platform: str | None, default: list[str]
+) -> list[str]:
+    """The pool of `platform`, or `default` when the platform is unknown (`None`) or has no
+    pool of its own."""
+    return default if platform is None else pools.get(platform, default)
+
+
 class FakeParentNameMutator(Mutator):
     """Replace parent_comm with legitimate system process names.
 
@@ -93,22 +101,25 @@ class FakeParentNameMutator(Mutator):
         platform = _platform_of(mutated)
         if intensity == "light":
             # Most common benign parent for the platform
-            candidates = {
-                "unix": ["systemd"],
-                "windows": ["explorer.exe"],
-            }.get(platform, ["systemd", "explorer.exe"])
+            candidates = _for_platform(
+                {"unix": ["systemd"], "windows": ["explorer.exe"]},
+                platform,
+                ["systemd", "explorer.exe"],
+            )
         elif intensity == "medium":
             # Context-appropriate parents (shells, init, service managers)
-            candidates = {
-                "unix": self.UNIX_PARENTS[:3],
-                "windows": self.WINDOWS_PARENTS[:3],
-            }.get(platform, self.BENIGN_PARENTS[:5])
+            candidates = _for_platform(
+                {"unix": self.UNIX_PARENTS[:3], "windows": self.WINDOWS_PARENTS[:3]},
+                platform,
+                self.BENIGN_PARENTS[:5],
+            )
         elif intensity == "heavy":
             # Full pool of legitimate names for the platform
-            candidates = {
-                "unix": self.UNIX_PARENTS,
-                "windows": self.WINDOWS_PARENTS,
-            }.get(platform, self.BENIGN_PARENTS)
+            candidates = _for_platform(
+                {"unix": self.UNIX_PARENTS, "windows": self.WINDOWS_PARENTS},
+                platform,
+                self.BENIGN_PARENTS,
+            )
         else:
             raise ValueError(f"invalid intensity: {intensity}")
 
@@ -173,10 +184,14 @@ class ParentPathMutator(Mutator):
             candidates = self.SYSTEM_PATHS
         elif intensity == "heavy":
             platform = _platform_of(mutated)
-            candidates = {
-                "unix": [p for p in self.SYSTEM_PATHS if p.startswith("/")],
-                "windows": [p for p in self.SYSTEM_PATHS if not p.startswith("/")],
-            }.get(platform, self.SYSTEM_PATHS)
+            candidates = _for_platform(
+                {
+                    "unix": [p for p in self.SYSTEM_PATHS if p.startswith("/")],
+                    "windows": [p for p in self.SYSTEM_PATHS if not p.startswith("/")],
+                },
+                platform,
+                self.SYSTEM_PATHS,
+            )
         else:
             raise ValueError(f"invalid intensity: {intensity}")
 
