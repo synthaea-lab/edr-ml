@@ -3,12 +3,13 @@
 `synthaea_ml.features.behavior.extract_behavior_features` (calibration, Python) mirrors
 `BehaviorVector::from_window` (correlator, Rust). The golden file pins the cases both sides
 agree on: the exec/connect/fileopen presence flags, the exec-to-connect and exec-to-filewrite
-delays, the suspicious-path test, the connect counters and IPv4 external destinations. Python
-is the reference, as for the other goldens.
+delays, the suspicious-path test, the connect counters and the external destinations.
 
-Cases where the two sides are known to disagree are NOT in this file, since a golden would
-freeze one side's answer and fail the other (see `issues/issue-ML-015.md`):
-IPv6 destinations, the unspecified address 0.0.0.0, and non-ASCII path casing.
+Rust is the reference for the rules the two sides used to disagree on (agent#203, ml#51):
+a global IPv6 destination is external, 0.0.0.0 and :: are internal, path casing is ASCII-only,
+and the path is the exec's `image_path`. An exec row without `image_path` is the documented
+fallback branch (first NUL-separated `cmdline` argument), kept for old wire records. IPv6
+rows carry the address as `daddr_v6` text next to `is_ipv6: true`.
 
 Run from any directory:
 
@@ -31,6 +32,15 @@ MS = 1_000_000
 
 def ex(ts_ms: int, cmdline: str) -> dict:
     return {"type": "exec", "ts_ns": ts_ms * MS, "cmdline": cmdline}
+
+
+def exi(ts_ms: int, image_path: str, cmdline: str) -> dict:
+    """An exec that carries `image_path`, the primary input of the suspicious-path test."""
+    return {"type": "exec", "ts_ns": ts_ms * MS, "cmdline": cmdline, "image_path": image_path}
+
+
+def cn6(ts_ms: int, daddr: str, dport: int) -> dict:
+    return {"type": "connect", "ts_ns": ts_ms * MS, "daddr_v6": daddr, "dport": dport, "is_ipv6": True}
 
 
 def cn(ts_ms: int, daddr: list[int], dport: int) -> dict:
@@ -94,6 +104,34 @@ CASES: dict[str, list[dict]] = {
         {"type": "exec", "ts_ns": 0, "cmdline": "/bin/sh\0"},
         {"type": "connect", "ts_ns": 1_500_000, "daddr_v4": [8, 8, 8, 8], "dport": 80, "is_ipv6": False},
     ],
+    # agent#203 case 1: IPv6 destinations (Rust `is_non_global_ipv6`).
+    "connect_ipv6_global": [cn6(0, "2606:4700:4700::1111", 443)],
+    "connect_ipv6_global_2001": [cn6(0, "2001:4860:4860::8888", 443)],
+    "connect_ipv6_loopback": [cn6(0, "::1", 443)],
+    "connect_ipv6_unspecified": [cn6(0, "::", 443)],
+    "connect_ipv6_link_local": [cn6(0, "fe80::1", 443)],
+    "connect_ipv6_unique_local": [cn6(0, "fd12:3456:789a::1", 443)],
+    "connect_ipv6_multicast": [cn6(0, "ff02::1", 443)],
+    "connect_ipv6_site_local_is_global": [cn6(0, "fec0::1", 443)],
+    "connect_ipv6_v4_mapped_private_is_external": [cn6(0, "::ffff:10.0.0.1", 443)],
+    "connect_ipv6_internal_then_global": [cn6(0, "fe80::1", 80), cn6(5, "2606:4700:4700::1111", 80)],
+    # agent#203 case 2: the unspecified IPv4 address is internal, `0.x.x.x` is not.
+    "connect_unspecified_ipv4": [cn(0, [0, 0, 0, 0], 22)],
+    "connect_zero_first_octet_not_unspecified": [cn(0, [0, 1, 2, 3], 22)],
+    # agent#203 case 3: ASCII-only lowercasing. U+212A KELVIN SIGN folds to `k` under
+    # Unicode `str.lower()` (DESK<kelvin>TOP would match `desktop`); it must not.
+    "path_ascii_only_kelvin_sign": [exi(0, "C:\\Users\\bob\\DESK\u212aTOP\\run.exe", "run.exe\0")],
+    "path_ascii_uppercase_still_matches": [exi(0, "C:\\Users\\bob\\DESKTOP\\run.exe", "run.exe\0")],
+    # agent#203 case 3: the path is `image_path`, not argv0 of `cmdline` (`exec -a`).
+    "path_image_path_wins_over_argv0_suspicious_image": [
+        exi(0, "/home/bob/Downloads/tool", "/usr/bin/ls\0-la\0")
+    ],
+    "path_image_path_wins_over_argv0_clean_image": [
+        exi(0, "/usr/bin/ls", "/home/bob/Downloads/tool\0")
+    ],
+    "path_empty_image_path_is_not_a_fallback": [exi(0, "", "/home/bob/Downloads/tool\0")],
+    # Fallback branch: no `image_path` (rows above without one: `suspicious_downloads`, ...).
+    "path_fallback_argv0_without_image_path": [ex(0, "/home/bob/Downloads/tool\0")],
     "no_exec_connect_and_write": [cn(100, [8, 8, 8, 8], 80), fo(200, 0o1)],
 }
 

@@ -49,10 +49,18 @@ def test_an_existing_daddr_v4_wins_over_daddr() -> None:
     assert normalize_for_behavior(raw)["daddr_v4"] == [8, 8, 8, 8]
 
 
-@pytest.mark.parametrize("daddr", ["2001:db8::1", "not-an-ip", None])
+@pytest.mark.parametrize("daddr", ["not-an-ip", None])
 def test_an_unparsable_daddr_becomes_the_zero_address(daddr: object) -> None:
     raw = {"type": "connect", "meta": META, "daddr": daddr, "dport": 443}
     assert normalize_for_behavior(raw)["daddr_v4"] == [0, 0, 0, 0]
+
+
+def test_an_ipv6_daddr_is_kept_as_text_for_behavior_py() -> None:
+    raw = {"type": "connect", "meta": META, "daddr": "2606:4700:4700::1111", "dport": 443}
+    out = normalize_for_behavior(raw)
+    assert out["is_ipv6"] is True
+    assert out["daddr_v6"] == "2606:4700:4700::1111"
+    assert "daddr_v4" not in out
 
 
 def test_file_open_is_retagged_and_keeps_flags_and_path() -> None:
@@ -100,10 +108,10 @@ def test_a_nat_private_destination_is_internal_only_with_octets() -> None:
     assert correlation_view[-1] == 1.0
 
 
-def test_an_ipv6_destination_is_skipped_only_when_is_ipv6_is_kept() -> None:
-    """`flatten_wire_event` drops `is_ipv6`, so an IPv6 destination would be read as an
-    external IPv4 one."""
-    v6 = {"type": "connect", "meta": META, "daddr": "2001:db8::1", "dport": 443, "is_ipv6": True}
+def test_an_ipv6_destination_is_classified_only_when_is_ipv6_is_kept() -> None:
+    """`flatten_wire_event` drops `is_ipv6`, so a link-local IPv6 destination would be read
+    as an external IPv4 one; `normalize_for_behavior` classifies it (internal)."""
+    v6 = {"type": "connect", "meta": META, "daddr": "fe80::1", "dport": 443, "is_ipv6": True}
     behavior = extract_behavior_features([normalize_for_behavior(e) for e in (EXEC, v6)])
     flattened = [flatten_wire_event(e) for e in (EXEC, v6)]
     correlation_view = extract_behavior_features([e for e in flattened if e is not None])
