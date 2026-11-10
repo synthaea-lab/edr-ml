@@ -33,6 +33,7 @@ from synthaea_ml.registry.records import (
     ScenarioReplayResult,
     TrainingRecord,
 )
+from synthaea_ml.timestamps import format_utc
 
 READABLE_SCHEMA_VERSIONS = (2, SCHEMA_VERSION)
 """Schema v3 only added optional blocks (empty or absent by default), so v2 records load."""
@@ -165,7 +166,7 @@ def write_training_record(
 
     record = TrainingRecord(
         schema_version=SCHEMA_VERSION,
-        trained_at=trained_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        trained_at=format_utc(trained_at),
         training_script=training_script,
         dataset_versions=list(dataset_versions),
         scenario_replays=list(scenario_replays) if scenario_replays else [],
