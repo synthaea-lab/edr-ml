@@ -91,7 +91,9 @@ def test_robustness_scores_the_forest_at_its_calibrated_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[dict] = []
-    monkeypatch.setattr(pipeline, "run_robustness_evaluation", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        pipeline, "run_robustness_evaluation", lambda **kwargs: calls.append(kwargs)
+    )
     forest = _forest()
     pipeline.evaluate_robustness(forest, [Path("beacon.yaml")], None, tier="T0")
     assert [(c["model"], c["threshold"]) for c in calls] == [
