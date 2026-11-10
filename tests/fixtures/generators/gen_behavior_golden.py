@@ -48,7 +48,7 @@ def fo(ts_ms: int, flags: int) -> dict:
 
 
 # name -> events. Flags: O_RDONLY 0, O_WRONLY 0o1, O_RDWR 0o2, invalid access mode 0o3,
-# O_CREAT 0o100.
+# O_CREAT 0o100, O_TRUNC 0o1000.
 CASES: dict[str, list[dict]] = {
     "empty": [],
     "exec_only_system_path": [ex(0, "/usr/bin/ls\0-la\0")],
@@ -79,6 +79,8 @@ CASES: dict[str, list[dict]] = {
     "no_write_invalid_access_mode": [fo(0, 0o3)],
     "write_invalid_mode_with_creat": [fo(0, 0o3 | 0o100)],
     "write_high_bits_only_rdonly": [fo(0, 0o2000000)],
+    "write_trunc_with_rdonly": [fo(0, 0o1000)],
+    "write_invalid_mode_with_trunc": [fo(0, 0o3 | 0o1000)],
     "dropper": [
         ex(0, "C:\\Users\\victim\\AppData\\Roaming\\payload.exe\0"),
         cn(500, [8, 8, 8, 8], 4444),
