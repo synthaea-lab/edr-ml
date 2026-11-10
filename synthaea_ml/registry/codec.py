@@ -177,9 +177,12 @@ def write_training_record(
         feature_bounds=feature_bounds,
     )
 
+    # The release gate hashes these bytes, so they must not depend on the OS that wrote
+    # them: text mode alone would write CRLF on Windows (#8).
     (model_dir / MODEL_RECORD_FILENAME).write_text(
         json.dumps(record_to_dict(record), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     return record
 
