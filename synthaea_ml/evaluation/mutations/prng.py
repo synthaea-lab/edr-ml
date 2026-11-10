@@ -5,11 +5,15 @@ Same constants (Knuth's 64-bit LCG), same seed default — Python and Rust
 tests can share fixture expectations.
 """
 
+from typing import TypeVar
+
+T = TypeVar("T")
+
 
 class LCG:
     """Knuth LCG — reproducible corpus, no external deps."""
 
-    def __init__(self, seed: int = 0x59417481):
+    def __init__(self, seed: int = 0x59417481) -> None:
         """Initialize LCG with seed.
 
         Args:
@@ -37,7 +41,7 @@ class LCG:
         """
         return low + ((self.next() >> 33) % (high - low))
 
-    def choice(self, items: list):
+    def choice(self, items: list[T]) -> T:
         """Select random item from list.
 
         Args:
@@ -53,7 +57,7 @@ class LCG:
             raise ValueError("cannot choose from empty list")
         return items[self.uniform(0, len(items))]
 
-    def shuffle(self, items: list) -> list:
+    def shuffle(self, items: list[T]) -> list[T]:
         """Fisher-Yates shuffle — returns new list, original unchanged.
 
         Args:

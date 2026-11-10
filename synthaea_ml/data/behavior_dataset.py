@@ -19,20 +19,21 @@ from pathlib import Path
 from typing import Any
 
 from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
+from synthaea_ml.data.records import FlatEvent
 from synthaea_ml.data.wire import RAW_EVENT_TYPES, flatten_wire_event
 from synthaea_ml.features import correlation
 
 DEFAULT_WINDOW_NS = 60 * 1_000_000_000
 
 
-def load_events(path: Path) -> list[dict[str, Any]]:
+def load_events(path: Path) -> list[FlatEvent]:
     """The usable events of a capture, flattened (see `flatten_wire_event`).
 
     Unreadable lines and event types the correlation features do not use are skipped.
     """
     if not path.exists():
         raise FileNotFoundError(f"capture not found: {path}")
-    events: list[dict[str, Any]] = []
+    events: list[FlatEvent] = []
     for raw in iter_jsonl(path, on_invalid=InvalidLine.SKIP, encoding_errors="replace"):
         if raw.get("type") in RAW_EVENT_TYPES:
             flat = flatten_wire_event(raw)
@@ -42,7 +43,7 @@ def load_events(path: Path) -> list[dict[str, Any]]:
 
 
 def records_from_events(
-    events: list[dict[str, Any]],
+    events: list[FlatEvent],
     window_ns: int = DEFAULT_WINDOW_NS,
     min_events: int = 1,
 ) -> list[dict[str, Any]]:
@@ -53,7 +54,7 @@ def records_from_events(
         window_ns: Correlation window ending at the incarnation's last event.
         min_events: Skip an incarnation with fewer events than this in its window.
     """
-    incarnations: dict[tuple[int, int | None], list[dict[str, Any]]] = {}
+    incarnations: dict[tuple[int, int | None], list[FlatEvent]] = {}
     for event in events:
         incarnations.setdefault((event["pid"], event.get("process_generation")), []).append(event)
 
@@ -61,7 +62,7 @@ def records_from_events(
     # the window is taken from the pid's own events instead of scanning the whole capture for
     # every incarnation: a real capture has a million events and thousands of incarnations,
     # which the full scan made quadratic (hours on a 30-minute capture).
-    by_pid: dict[int, list[dict[str, Any]]] = {}
+    by_pid: dict[int, list[FlatEvent]] = {}
     for event in events:
         by_pid.setdefault(event["pid"], []).append(event)
 

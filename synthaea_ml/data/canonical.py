@@ -16,8 +16,11 @@ than from a sensor's display `cmdline` string.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
 
-def ml_cmdline_from_record(record: dict) -> str:
+
+def ml_cmdline_from_record(record: Mapping[str, Any]) -> str:
     """The canonical ML cmdline string for one exec / baseline record — the exact
     mirror of `schema::ExecEvent::ml_cmdline` (Rust).
 
@@ -31,7 +34,7 @@ def ml_cmdline_from_record(record: dict) -> str:
     return str(record.get("cmdline", ""))
 
 
-def argv_from_record(record: dict) -> list[str]:
+def argv_from_record(record: Mapping[str, Any]) -> list[str]:
     """Canonical argv for one exec / baseline record.
 
     Priority, matching `schema::ExecEvent::ml_cmdline` and `capture_to_baseline`:

@@ -327,3 +327,41 @@ def test_a_none_lineage_and_a_missing_lineage_extract_identical_features() -> No
     stripped = RemoveLineageMutator().mutate(full, "heavy", LCG(seed=1))
     assert stripped["parent_comm"] is None
     assert lineage.extract_features(stripped) == lineage.extract_features({})
+
+
+def _seeds_results(
+    mutator: FakeParentNameMutator | ParentPathMutator,
+    record: dict[str, str | None],
+    intensity: str,
+    key: str,
+) -> set[str | None]:
+    """The values `key` takes over 60 seeds."""
+    return {mutator.mutate(dict(record), intensity, LCG(seed=s))[key] for s in range(60)}
+
+
+def test_fake_parent_name_unknown_platform_draws_from_the_default_pools() -> None:
+    """A record with no platform hint draws from the default pool of each intensity: both
+    families for light, the first five benign names for medium, all of them for heavy."""
+    mutator = FakeParentNameMutator()
+    record = {"parent_comm": "x", "parent_image_path": None}
+
+    light = _seeds_results(mutator, record, "light", "parent_comm")
+    assert light == {"systemd", "explorer.exe"}
+    medium = _seeds_results(mutator, record, "medium", "parent_comm")
+    assert medium <= set(mutator.BENIGN_PARENTS[:5])
+    assert len(medium) > 1
+    heavy = _seeds_results(mutator, record, "heavy", "parent_comm")
+    assert heavy <= set(mutator.BENIGN_PARENTS)
+    assert len(heavy) > 5
+
+
+def test_parent_path_heavy_unknown_platform_draws_from_all_system_paths() -> None:
+    """With no platform hint the heavy intensity keeps both the POSIX and the Windows
+    system paths."""
+    mutator = ParentPathMutator()
+    record = {"parent_comm": "x", "parent_image_path": "app"}
+
+    paths = _seeds_results(mutator, record, "heavy", "parent_image_path")
+    assert paths <= set(mutator.SYSTEM_PATHS)
+    assert any(p and p.startswith("/") for p in paths)
+    assert any(p and not p.startswith("/") for p in paths)

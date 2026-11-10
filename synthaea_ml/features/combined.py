@@ -30,6 +30,10 @@ Usage:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
+from synthaea_ml.data.records import FlatEvent
 from synthaea_ml.features import correlation, lineage
 
 # Combined feature names: correlation (8) + lineage (6) = 14
@@ -37,7 +41,7 @@ FEATURE_NAMES = correlation.FEATURE_NAMES + lineage.FEATURE_NAMES
 
 
 def extract_combined_features(
-    events: list[dict], pid: int, generation: int | None = None
+    events: list[FlatEvent], pid: int, generation: int | None = None
 ) -> list[float]:
     """Extract combined correlation + lineage features.
 
@@ -67,6 +71,7 @@ def extract_combined_features(
         for e in correlation.events_for_pid(events, pid, generation)
         if e.get("type") == "exec"
     ]
+    exec_event: Mapping[str, Any]
     if pid_execs:
         # Use most recent exec event (highest ts_ns)
         exec_event = max(pid_execs, key=lambda e: e.get("ts_ns", 0))
@@ -81,7 +86,7 @@ def extract_combined_features(
 
 
 def extract_combined_features_dict(
-    events: list[dict], pid: int, generation: int | None = None
+    events: list[FlatEvent], pid: int, generation: int | None = None
 ) -> dict[str, float]:
     """Extract combined features as a named dict (for debugging/introspection).
 
