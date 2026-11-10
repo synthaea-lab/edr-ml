@@ -1,7 +1,8 @@
 """Re-verify a model record against on-disk state: the release gate's insertion point.
 
-The gate does not retrain or replay; it checks that every dataset and scenario the
-record binds still hashes to the value the record locked, and that each cached
+The gate does not retrain, replay or re-run the robustness evaluation; it checks that
+every dataset and scenario the record binds (through its scenario replays and its
+robustness cards) still hashes to the value the record locked, and that each cached
 ``passed`` agrees with a re-computation of the passing criterion.
 """
 
@@ -18,7 +19,12 @@ from synthaea_ml.data.manifest import (
 )
 from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.codec import load_training_record
-from synthaea_ml.registry.records import DatasetVersion, ScenarioReplayResult, compute_passed
+from synthaea_ml.registry.records import (
+    DatasetVersion,
+    RobustnessCard,
+    ScenarioReplayResult,
+    compute_passed,
+)
 
 
 def verify_training_record(
@@ -26,10 +32,10 @@ def verify_training_record(
     baselines_root: Path,
     scenarios_root: Path,
 ) -> None:
-    """Re-verify every ``DatasetVersion`` and every ``ScenarioReplayResult``
-    in the model record against on-disk state.
+    """Re-verify every ``DatasetVersion``, every ``ScenarioReplayResult`` and
+    every ``RobustnessCard`` in the model record against on-disk state.
 
-    The release gate calls this before shipping a model. Two families of
+    The release gate calls this before shipping a model. Three families of
     checks:
 
     * **Dataset provenance** (schema v1 semantics, unchanged): each dataset
@@ -40,6 +46,9 @@ def verify_training_record(
       ``scenario_yaml_sha256`` must still match ``scenarios_root/<name>.yaml``,
       and the recorded ``passed`` value must agree with a re-computation of
       the passing criterion (catches a mutated cache).
+    * **Robustness card provenance**: each card's ``scenario_yaml_sha256`` must
+      still match ``scenarios_root/<name>.yaml``, so a card computed against a
+      stale scenario set fails (issue #48).
 
     Args:
         model_dir: The registry version directory.
@@ -47,8 +56,8 @@ def verify_training_record(
             ``ml/datasets/baselines/``. Each ``DatasetVersion.name`` is looked
             up as ``baselines_root/<name>/``.
         scenarios_root: The directory holding scenario yaml sidecars, e.g.
-            ``<root>/scenarios/scenarios/``. Each ``ScenarioReplayResult.scenario_name`` is
-            looked up as ``scenarios_root/<name>.yaml``.
+            ``<root>/scenarios/scenarios/``. Each replay's and each card's
+            ``scenario_name`` is looked up as ``scenarios_root/<name>.yaml``.
 
     Raises:
         FileNotFoundError: If the model record itself, any referenced
@@ -64,6 +73,8 @@ def verify_training_record(
         verify_dataset_version(dataset_version, baselines_root)
     for replay in record.scenario_replays:
         verify_scenario_replay(replay, scenarios_root)
+    for card in record.robustness_cards:
+        verify_robustness_card(card, scenarios_root)
 
 
 def verify_dataset_version(dataset_version: DatasetVersion, baselines_root: Path) -> None:
@@ -143,19 +154,9 @@ def verify_scenario_replay(
         ValueError: If the yaml hash or the re-computed ``passed`` disagrees
             with the recorded value.
     """
-    yaml_path = scenarios_root / f"{replay.scenario_name}.yaml"
-    if not yaml_path.exists():
-        raise FileNotFoundError(
-            f"scenario yaml {yaml_path} missing — cannot verify replay for "
-            f"{replay.scenario_name!r}"
-        )
-    current_hash = sha256_file(yaml_path)
-    if current_hash != replay.scenario_yaml_sha256:
-        raise ValueError(
-            f"scenario {replay.scenario_name!r} yaml hash mismatch: "
-            f"replay locked {replay.scenario_yaml_sha256}, "
-            f"current yaml is {current_hash}"
-        )
+    _verify_scenario_yaml_hash(
+        replay.scenario_name, replay.scenario_yaml_sha256, scenarios_root, bound_by="replay"
+    )
     recomputed = compute_passed(replay.expected_detections, replay.observed_detections)
     if recomputed != replay.passed:
         raise ValueError(
@@ -163,3 +164,45 @@ def verify_scenario_replay(
             f"cached {replay.passed}, re-computed {recomputed}"
         )
 
+
+
+def verify_robustness_card(card: RobustnessCard, scenarios_root: Path) -> None:
+    """Re-verify one ``RobustnessCard``'s binding to its source yaml: its
+    ``scenario_yaml_sha256`` must match the current content hash of
+    ``scenarios_root/<scenario_name>.yaml``.
+
+    The gate does *not* re-run the evaluation; a card measured against a scenario
+    that has since changed no longer describes the shipped scenario set.
+
+    Raises:
+        FileNotFoundError: If the source yaml is missing.
+        ValueError: If the yaml hash disagrees with the one the card locked.
+    """
+    _verify_scenario_yaml_hash(
+        card.scenario_name, card.scenario_yaml_sha256, scenarios_root, bound_by="robustness card"
+    )
+
+
+def _verify_scenario_yaml_hash(
+    scenario_name: str, locked_sha256: str, scenarios_root: Path, *, bound_by: str
+) -> None:
+    """Check ``scenarios_root/<scenario_name>.yaml`` exists and still hashes to
+    ``locked_sha256``, the value the record entry named by ``bound_by`` locked.
+
+    Raises:
+        FileNotFoundError: If the yaml is missing.
+        ValueError: If its current hash differs from ``locked_sha256``.
+    """
+    yaml_path = scenarios_root / f"{scenario_name}.yaml"
+    if not yaml_path.exists():
+        raise FileNotFoundError(
+            f"scenario yaml {yaml_path} missing — cannot verify {bound_by} for "
+            f"{scenario_name!r}"
+        )
+    current_hash = sha256_file(yaml_path)
+    if current_hash != locked_sha256:
+        raise ValueError(
+            f"scenario {scenario_name!r} yaml hash mismatch: "
+            f"{bound_by} locked {locked_sha256}, "
+            f"current yaml is {current_hash}"
+        )

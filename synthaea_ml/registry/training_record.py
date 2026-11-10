@@ -62,6 +62,7 @@ from synthaea_ml.registry.dataset_binding import (
 from synthaea_ml.registry.layout import MODEL_RECORD_FILENAME
 from synthaea_ml.registry.provenance import (
     verify_dataset_version,
+    verify_robustness_card,
     verify_scenario_replay,
     verify_training_record,
 )
@@ -101,6 +102,7 @@ __all__ = [
     "record_from_dict",
     "record_to_dict",
     "verify_dataset_version",
+    "verify_robustness_card",
     "verify_scenario_replay",
     "verify_training_record",
     "write_training_record",
