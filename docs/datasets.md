@@ -160,9 +160,16 @@ reads a sample, so a baseline edited without a new manifest never reaches a mode
 A model record names each dataset `<platform>__<workload_label>__<host_id>__<YYYY-MM-DD>`
 ([`default_dataset_name`](../synthaea_ml/registry/dataset_binding.py)), the date being the day of
 `capture_start`. Double underscores separate the parts so a hyphenated label stays unambiguous.
-The provenance check looks a dataset up as `datasets/baselines/<name>/`
-([registry.md](registry.md#provenance-gate)), so a dataset that a shipped model is bound to must
-live in a directory of that name.
+The provenance check ([registry.md](registry.md#provenance-gate)) looks a dataset up as the one
+directory under `datasets/baselines/` that claims its name: a directory named `<name>`, or one
+whose manifest derives `<name>`. A baseline can therefore keep its capture-session directory
+name (`linux-wsl2-solkapc-2026-09-09`). The lookup fails closed:
+
+- two claimants (two captures of one host, label and day, or a directory named `<name>` next
+  to a capture whose manifest derives it) fail as ambiguous. The exact name gets no
+  precedence, so give one capture a different `workload_label`;
+- a `manifest.json` under `datasets/baselines/` that cannot be read fails the lookup with its
+  directory named, since it might be the dataset's.
 
 ## Site corpora
 

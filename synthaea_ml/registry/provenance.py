@@ -14,11 +14,13 @@ from synthaea_ml.data.manifest import (
     BEHAVIOR_CAPTURE_FILENAME,
     CORRELATION_DATASET_FILENAME,
     DEFAULT_BASELINE_FILENAME,
+    MANIFEST_FILENAME,
     load_manifest,
     verify_manifest,
 )
 from synthaea_ml.hashing import sha256_file
 from synthaea_ml.registry.codec import load_training_record
+from synthaea_ml.registry.dataset_binding import default_dataset_name
 from synthaea_ml.registry.records import (
     DatasetVersion,
     RobustnessCard,
@@ -78,21 +80,18 @@ def verify_training_record(
 
 
 def verify_dataset_version(dataset_version: DatasetVersion, baselines_root: Path) -> None:
-    """Re-verify one ``DatasetVersion`` against ``baselines_root/<name>/``: its baseline must
-    still match its manifest, and the manifest must still carry the hash and sample count
-    the record locked.
+    """Re-verify one ``DatasetVersion`` against its baseline directory (see
+    ``locate_baseline_dir``): its baseline must still match its manifest, and the manifest
+    must still carry the hash and sample count the record locked.
 
     Raises:
         FileNotFoundError: If the baseline directory, its samples file or its manifest
             is missing.
-        ValueError: If the baseline no longer matches its manifest, or the manifest's hash
-            or sample count no longer matches the record.
+        ValueError: If two directories claim the dataset's name, the baseline no longer
+            matches its manifest, or the manifest's hash or sample count no longer matches
+            the record.
     """
-    baseline_dir = baselines_root / dataset_version.name
-    if not baseline_dir.is_dir():
-        raise FileNotFoundError(
-            f"dataset {dataset_version.name!r} not found under {baselines_root}"
-        )
+    baseline_dir = locate_baseline_dir(dataset_version.name, baselines_root)
     baseline_filename = _baseline_filename(baseline_dir)
     verify_manifest(baseline_dir, baseline_filename=baseline_filename)
     current = load_manifest(baseline_dir)
@@ -108,6 +107,58 @@ def verify_dataset_version(dataset_version: DatasetVersion, baselines_root: Path
             f"training record locked {dataset_version.sample_count}, "
             f"current baseline has {current.sample_count}"
         )
+
+
+def locate_baseline_dir(dataset_name: str, baselines_root: Path) -> Path:
+    """The directory under ``baselines_root`` holding the dataset a record names.
+
+    A directory claims the dataset when it is named after it or when its manifest derives
+    that name (``default_dataset_name``): a record names a dataset after its manifest, and
+    the committed baselines keep their capture-session directory names
+    (``linux-wsl2-solkapc-2026-09-09``, #47). Exactly one directory may claim it; the
+    exact name gets no precedence, so a second claimant is never silently ignored.
+
+    Raises:
+        FileNotFoundError: If no directory claims the dataset.
+        ValueError: If several directories claim it, so the record does not say which one it
+            was trained on, or if a sibling's manifest cannot be read (the gate fails closed
+            rather than skip a directory that might be the one).
+    """
+    claimants = _directories_claiming(dataset_name, baselines_root)
+    if not claimants:
+        raise FileNotFoundError(f"dataset {dataset_name!r} not found under {baselines_root}")
+    if len(claimants) > 1:
+        names = ", ".join(claimant.name for claimant in claimants)
+        raise ValueError(f"dataset {dataset_name!r} is ambiguous under {baselines_root}: {names}")
+    return claimants[0]
+
+
+def _directories_claiming(dataset_name: str, baselines_root: Path) -> list[Path]:
+    if not baselines_root.is_dir():
+        return []
+    return [
+        candidate
+        for candidate in sorted(baselines_root.iterdir())
+        if candidate.is_dir()
+        and (candidate.name == dataset_name or _manifest_derives(candidate, dataset_name))
+    ]
+
+
+def _manifest_derives(candidate: Path, dataset_name: str) -> bool:
+    """True when ``candidate``'s manifest derives ``dataset_name``; False without a manifest.
+
+    Raises:
+        ValueError: If the manifest exists but cannot be read, naming the directory.
+    """
+    if not (candidate / MANIFEST_FILENAME).is_file():
+        return False
+    try:
+        return default_dataset_name(candidate) == dataset_name
+    except (ValueError, KeyError) as error:
+        raise ValueError(
+            f"cannot look up dataset {dataset_name!r}: the manifest in {candidate} "
+            f"is unreadable ({error!r})"
+        ) from error
 
 
 def _baseline_filename(baseline_dir: Path) -> str:
