@@ -108,12 +108,15 @@ def write_scorer_metadata(
 
 
 def evaluate_robustness(
-    model: IsolationForest,
+    forest: CalibratedForest,
     scenarios: Sequence[Path],
     events: Path | None,
     tier: str,
 ) -> list[RobustnessCard]:
-    """One robustness card per scenario, in order.
+    """One robustness card per scenario, in order, at the forest's calibrated threshold.
+
+    The cards measure escapes at the operating point the agent ships (the threshold in
+    `model_metadata.json`), not at the forest's decision boundary (issue #50).
 
     A failed evaluation propagates, with a note naming the scenario: a crashed evaluation
     must not produce a record with missing cards and exit 0.
@@ -122,10 +125,11 @@ def evaluate_robustness(
     for scenario in scenarios:
         try:
             card = run_robustness_evaluation(
-                model=model,
+                model=forest.model,
                 scenario_yaml=scenario,
                 tier=tier,
                 mutation_seed=RANDOM_SEED,
+                threshold=forest.calibration.threshold,
                 events_source=events,
             )
         except Exception as error:

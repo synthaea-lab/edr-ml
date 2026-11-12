@@ -124,7 +124,7 @@ def run(args: TrainerArgs) -> None:
     )
 
     robustness_cards = evaluate_robustness(
-        forest.model, args.robustness_scenarios, args.robustness_events, tier="T1"
+        forest, args.robustness_scenarios, args.robustness_events, tier="T1"
     )
     for card in robustness_cards:
         print(describe_card(card))

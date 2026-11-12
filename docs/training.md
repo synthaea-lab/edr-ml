@@ -62,8 +62,8 @@ flowchart LR
 6. **Evaluate.** With `--robustness-scenarios`, `evaluate_robustness` produces one robustness
    card per scenario, at tier T0 or T1 and with the mutation seed `RANDOM_SEED`. A failed
    evaluation raises, with a note naming the scenario: a run never writes a record with missing
-   cards and exits 0. The trainers evaluate at the forest's decision boundary (threshold 0), not
-   at the calibrated threshold.
+   cards and exits 0. The cards are scored at the calibrated threshold, the operating point
+   `model_metadata.json` ships to the agent, not at the forest's decision boundary (0).
 7. **Record.** Each trainer writes `model_record.json` itself, because what it binds differs.
 
 [`tests/test_trainer_artifacts.py`](../tests/test_trainer_artifacts.py) rebuilds the three
