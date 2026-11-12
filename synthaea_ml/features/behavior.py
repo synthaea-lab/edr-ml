@@ -92,9 +92,11 @@ def _is_non_global_ipv6(addr: str) -> bool:
 def _is_external(e: dict[str, Any]) -> bool:
     """Whether a connect event's destination counts as external.
 
-    An IPv6 event whose address is missing or unparseable is NOT external: the class cannot
-    be judged, and an invented answer would be worse than none."""
-    if e.get("is_ipv6", False) or e.get("daddr_v6") is not None:
+    An IPv6 event (`is_ipv6`, as in Rust where the address type decides) whose address is
+    missing or unparseable is NOT external: the class cannot be judged, and an invented
+    answer would be worse than none. An IPv4 event without `daddr_v4` is judged as
+    `0.0.0.0`, so it is internal too, the same choice."""
+    if e.get("is_ipv6", False):
         try:
             v6 = ipaddress.IPv6Address(e["daddr_v6"])
         except (KeyError, TypeError, ValueError):

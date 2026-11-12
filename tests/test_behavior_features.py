@@ -89,6 +89,20 @@ def test_a_global_ipv6_destination_is_external(addr: str) -> None:
     assert named(extract_behavior_features([connect_v6(addr)]))["dest_is_external"] == 1.0
 
 
+def test_an_ipv4_connect_without_an_address_is_not_external() -> None:
+    # No `daddr_v4` is judged as `0.0.0.0` (unspecified, internal): an unknown destination is
+    # not scored as external. It used to count as external before `0.0.0.0` became internal.
+    event = {"type": "connect", "ts_ns": 1_000_000_000, "dport": 443, "is_ipv6": False}
+    assert named(extract_behavior_features([event]))["dest_is_external"] == 0.0
+
+
+def test_daddr_v6_without_is_ipv6_is_ignored() -> None:
+    # Rust decides on the address type, so `is_ipv6` alone selects the IPv6 branch here.
+    event = {"type": "connect", "ts_ns": 1_000_000_000, "dport": 443, "is_ipv6": False,
+             "daddr_v4": [8, 8, 8, 8], "daddr_v6": "::1"}
+    assert named(extract_behavior_features([event]))["dest_is_external"] == 1.0
+
+
 @pytest.mark.parametrize(
     "addr", ["::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:192.168.1.1", "::ffff:0.0.0.0"]
 )
