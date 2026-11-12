@@ -75,6 +75,8 @@ def normalize_for_behavior(e: dict[str, Any]) -> dict[str, Any]:
         {"type": "exec",      "meta": {"pid": ..., "timestamp_ns": ...}, "cmdline": ...}
         {"type": "connect",   "meta": {...}, "daddr_v4": [...], "dport": ..., "is_ipv6": ...}
         {"type": "connect",   "meta": {...}, "daddr": "1.2.3.4", "dport": ...}  (NAT captures)
+        {"type": "connect",   "meta": {...}, "daddr": "2001:db8::1", "dport": ...}  (IPv6: kept
+                                                  as `daddr_v6` text, with `is_ipv6` set)
         {"type": "file_open", "meta": {...}, "flags": ..., "path": ...}
     Flat format (every other input field is kept as is, `meta` included):
         {"type": "exec",     "pid": ..., "ts_ns": ..., "cmdline": ...}
@@ -92,9 +94,14 @@ def normalize_for_behavior(e: dict[str, Any]) -> dict[str, Any]:
         e["type"] = "fileopen"
     # NAT captures emit daddr as a dotted-decimal string; Host-Only captures use
     # daddr_v4 as a list of ints.  Normalise to daddr_v4 so behavior.py is uniform.
+    # An IPv6 `daddr` (it contains a colon) goes to `daddr_v6`, kept as text for behavior.py.
     if "daddr" in e and "daddr_v4" not in e:
-        try:
-            e["daddr_v4"] = [int(b) for b in e["daddr"].split(".")]
-        except (ValueError, AttributeError):
-            e["daddr_v4"] = [0, 0, 0, 0]
+        if isinstance(e["daddr"], str) and ":" in e["daddr"]:
+            e["is_ipv6"] = True
+            e["daddr_v6"] = e["daddr"]
+        else:
+            try:
+                e["daddr_v4"] = [int(b) for b in e["daddr"].split(".")]
+            except (ValueError, AttributeError):
+                e["daddr_v4"] = [0, 0, 0, 0]
     return e
