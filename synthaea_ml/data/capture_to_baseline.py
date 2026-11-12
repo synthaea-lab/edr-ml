@@ -16,14 +16,13 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from synthaea_ml.data.canonical import argv_from_record
-from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
+from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl, write_jsonl
 
 
 @dataclass(frozen=True)
@@ -79,9 +78,7 @@ def run(args: CaptureToBaselineArgs) -> int:
         argv_list.append(argv)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open("w", encoding="utf-8") as f:
-        for argv in argv_list:
-            f.write(json.dumps({"argv": argv}) + "\n")
+    write_jsonl(args.out, ({"argv": argv} for argv in argv_list))
 
     print(
         f"[info] {n_records} records read, {n_exec} exec events, "

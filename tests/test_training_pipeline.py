@@ -67,6 +67,15 @@ def test_the_scorer_metadata_is_the_threshold_and_the_bounds(tmp_path: Path) -> 
     }
 
 
+def test_the_scorer_metadata_has_lf_line_endings_on_every_platform(tmp_path: Path) -> None:
+    forest = _forest()
+    path = tmp_path / "model_metadata.json"
+
+    pipeline.write_scorer_metadata(path, forest.calibration, forest.bounds)
+
+    assert b"\r" not in path.read_bytes()
+
+
 def test_robustness_runs_every_scenario_in_order_with_the_seed_and_tier(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

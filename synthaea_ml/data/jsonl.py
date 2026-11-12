@@ -1,4 +1,4 @@
-"""Read JSON-Lines files (agent event logs, baselines, site corpora) with one stated policy.
+"""Read and write JSON-Lines files (agent event logs, baselines, site corpora).
 
 Every reader of a `.jsonl` file goes through `iter_jsonl`, and every caller names what
 happens to a line that is not a JSON object (`InvalidLine`): raise, skip silently, or
@@ -8,16 +8,21 @@ how its loop was written.
 Lines are split on `\\n` only (`\\r\\n` too), not on every Unicode line boundary:
 `str.splitlines` would also break a record on a raw U+2028, U+2029 or U+0085 inside a
 JSON string, which the agent's serializer does not escape.
+
+`write_jsonl` writes `\\n` line endings on every platform: a baseline's bytes are pinned
+by its manifest's `sample_sha256`.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
+
+from synthaea_ml.lf_text import open_lf_text
 
 logger = logging.getLogger(__name__)
 
@@ -97,3 +102,10 @@ def _handle_invalid(error: InvalidJsonlLineError, on_invalid: InvalidLine) -> No
         raise error
     if on_invalid is InvalidLine.WARN:
         logger.warning("%s", error)
+
+
+def write_jsonl(path: Path, records: Iterable[Mapping[str, Any]]) -> None:
+    """Write each record of `records` to `path` as one JSON object per line, in order."""
+    with open_lf_text(path) as lines:
+        for record in records:
+            lines.write(json.dumps(record) + "\n")

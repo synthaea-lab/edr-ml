@@ -45,6 +45,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from synthaea_ml.hashing import sha256_file
+from synthaea_ml.lf_text import write_lf_text
 
 SCHEMA_VERSION = 1
 """Bumped only when a field changes in a way that breaks readers."""
@@ -191,10 +192,7 @@ def write_manifest(
     )
 
     manifest_path = baseline_dir / MANIFEST_FILENAME
-    manifest_path.write_text(
-        json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_lf_text(manifest_path, json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n")
     return manifest
 
 
