@@ -29,6 +29,7 @@ from synthaea_ml.registry.training_record import (
     Environment,
     ExpectedDetection,
     ObservedDetection,
+    RobustnessCard,
     ScenarioReplayResult,
     compute_passed,
     dataset_version_from_manifest,
@@ -233,6 +234,42 @@ def test_modern_entry_detects_mutated_scenario_yaml(tmp_path: Path) -> None:
 
     with pytest.raises(VerificationError, match="yaml hash mismatch"):
         verify_provenance(model_dir, baselines_root, scenarios_root, strict=False)
+
+
+def test_modern_entry_detects_stale_robustness_card(tmp_path: Path) -> None:
+    """A robustness card computed against a scenario that has since changed must fail
+    the release gate, as a stale replay does (issue #48)."""
+    baselines_root = tmp_path / "baselines"
+    baselines_root.mkdir()
+    scenarios_root = tmp_path / "scenarios"
+    dataset_name = "linux__dev__abc__2026-09-14"
+    dv = dataset_version_from_manifest(
+        _make_baseline(baselines_root, name=dataset_name), name=dataset_name
+    )
+    _, yaml_sha = write_scenario_yaml(scenarios_root, "beacon", "kind: beacon\n")
+    card = RobustnessCard(
+        scenario_name="beacon",
+        scenario_yaml_sha256=yaml_sha,
+        tested_at="2026-09-23T10:15:00Z",
+        mutation_results=[],
+        escape_rate=0.0,
+        median_score_degradation=0.0,
+        worst_case_degradation=0.0,
+    )
+    model_dir = tmp_path / "model_out"
+    model_dir.mkdir()
+    write_training_record(
+        model_dir,
+        training_script="synthaea_ml/training/train_linux.py",
+        dataset_versions=[dv],
+        robustness_cards=[card],
+        trained_at=_START,
+    )
+
+    (scenarios_root / "beacon.yaml").write_text("kind: beacon-mutated\n", encoding="utf-8")
+
+    with pytest.raises(VerificationError, match="robustness card locked"):
+        verify_provenance(model_dir, baselines_root, scenarios_root, strict=True)
 
 
 # --- Strict-mode env-var parsing ------------------------------------------

@@ -85,10 +85,10 @@ ships. For each `model.onnx` given, or every `registry/*/*/model.onnx` by defaul
      manifest, and the manifest must still carry the hash and sample count the record locked;
    - each scenario replay's sidecar is looked up as `<scenarios checkout>/scenarios/<name>.yaml`
      and must still hash to `scenario_yaml_sha256`, and `passed` is recomputed from the recorded
-     counts, so an edited `passed` is caught.
-
-   Robustness cards are bound to their sidecar by hash in the record, but the gate does not
-   re-verify that hash today.
+     counts, so an edited `passed` is caught;
+   - each robustness card's sidecar is looked up the same way and must still hash to its
+     `scenario_yaml_sha256`, so a card computed against a stale scenario set fails. The gate does
+     not re-run the evaluation.
 
 A version without `model_record.json` passes with a warning, unless `SYNTHAEA_STRICT_PROVENANCE`
 is `1`, `true` or `yes`; then it fails. Strict mode is the release setting. The command exits 1

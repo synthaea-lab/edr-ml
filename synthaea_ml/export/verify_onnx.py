@@ -17,12 +17,13 @@ produced:
 
 In addition to the ONNX-runtime checks above, each registry version directory is
 required to carry a `model_record.json` recording the datasets it was trained on and
-the scenario replays that validated it (see
+the scenario replays and robustness cards that validated it (see
 `synthaea_ml.registry.training_record`, ADR-0009, rule 3 of `ml/README.md`).
 When present, `verify_training_record` is called: every referenced baseline must
 still exist under `ml/datasets/baselines/` and still hash to the value the record
-locked, and every referenced scenario yaml must still exist under `scenarios/` in the
-synthaea-lab/scenarios sibling checkout and still hash to the value the record locked.
+locked, and every scenario yaml a replay or a robustness card references must still exist
+under `scenarios/` in the synthaea-lab/scenarios sibling checkout and still hash to the
+value the record locked.
 
 Pre-#44 legacy entries (`cmdline-iforest-{linux,windows}/0.1.0/`) predate the
 record concept and have no `model_record.json`. In interactive/dev mode they pass
@@ -183,7 +184,8 @@ def verify_provenance(
     `model_record.json` is present, `verify_training_record` re-checks every
     referenced baseline (existence, manifest verify, sample_sha256 match) and
     every referenced scenario replay (yaml existence, yaml sha256 match,
-    passed re-computation) — the release gate ADR-0009 mandates.
+    passed re-computation) — the release gate ADR-0009 mandates — and every
+    robustness card's yaml (existence, yaml sha256 match).
 
     Raises:
         VerificationError: In strict mode when no `model_record.json` is

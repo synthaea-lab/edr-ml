@@ -33,11 +33,13 @@ from synthaea_ml.registry.training_record import (
     ExpectedDetection,
     FeatureBounds,
     ObservedDetection,
+    RobustnessCard,
     ScenarioReplayResult,
     compute_passed,
     dataset_version_from_manifest,
     default_dataset_name,
     load_training_record,
+    verify_robustness_card,
     verify_scenario_replay,
     verify_training_record,
     write_training_record,
@@ -582,6 +584,75 @@ def test_verify_training_record_detects_mutated_scenario_yaml_end_to_end(tmp_pat
         scenario_replays=[replay],
         trained_at=_TRAINED_AT,
     )
+
+    (scenarios_root / "beacon.yaml").write_text("v2 mutated\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="yaml hash mismatch"):
+        verify_training_record(model_dir, baselines_root, scenarios_root)
+
+
+# --- verify_robustness_card ------------------------------------------------
+
+
+def _make_card(
+    scenarios_root: Path, *, name: str = "beacon", contents: str = "v1\n"
+) -> RobustnessCard:
+    """A ``RobustnessCard`` bound to a yaml just written on disk. The gate checks only
+    the binding, so the card carries no mutation results."""
+    _, sha = write_scenario_yaml(scenarios_root, name, contents)
+    return RobustnessCard(
+        scenario_name=name,
+        scenario_yaml_sha256=sha,
+        tested_at="2026-09-23T10:15:00Z",
+        mutation_results=[],
+        escape_rate=0.0,
+        median_score_degradation=0.0,
+        worst_case_degradation=0.0,
+    )
+
+
+def test_verify_robustness_card_matches(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    verify_robustness_card(_make_card(scenarios_root), scenarios_root)  # no exception
+
+
+def test_verify_robustness_card_detects_missing_yaml(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    card = _make_card(scenarios_root, name="beacon")
+    (scenarios_root / "beacon.yaml").unlink()
+    with pytest.raises(FileNotFoundError, match="cannot verify robustness card"):
+        verify_robustness_card(card, scenarios_root)
+
+
+def test_verify_robustness_card_detects_mutated_yaml(tmp_path: Path) -> None:
+    """The scenario changed after the card was computed: the card measures a stale
+    scenario set, so the release gate must refuse it."""
+    scenarios_root = tmp_path / "scenarios"
+    card = _make_card(scenarios_root, name="beacon", contents="v1\n")
+    (scenarios_root / "beacon.yaml").write_text("v2 different content\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="robustness card locked"):
+        verify_robustness_card(card, scenarios_root)
+
+
+def test_verify_training_record_detects_stale_robustness_card_end_to_end(tmp_path: Path) -> None:
+    """A stale card surfaces through the release gate's single entry point (issue #48)."""
+    baselines_root = tmp_path / "baselines"
+    baseline_dir = baselines_root / "linux__dev__abc__2026-09-11"
+    baseline_dir.mkdir(parents=True)
+    _make_baseline_with_manifest(baseline_dir, lines=['{"argv": ["ls"]}'])
+    dv = dataset_version_from_manifest(baseline_dir, name="linux__dev__abc__2026-09-11")
+    scenarios_root = tmp_path / "scenarios"
+    card = _make_card(scenarios_root, name="beacon", contents="v1\n")
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+    write_training_record(
+        model_dir,
+        training_script="synthaea_ml/training/train_linux.py",
+        dataset_versions=[dv],
+        robustness_cards=[card],
+        trained_at=_TRAINED_AT,
+    )
+    verify_training_record(model_dir, baselines_root, scenarios_root)  # fresh: no exception
 
     (scenarios_root / "beacon.yaml").write_text("v2 mutated\n", encoding="utf-8")
     with pytest.raises(ValueError, match="yaml hash mismatch"):
