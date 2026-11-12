@@ -84,10 +84,17 @@ def connect_v6(addr: str | None) -> dict:
     return event
 
 
-@pytest.mark.parametrize("addr", ["2606:4700:4700::1111", "2001:4860:4860::8888", "::ffff:10.0.0.1"])
+@pytest.mark.parametrize("addr", ["2606:4700:4700::1111", "2001:4860:4860::8888", "::ffff:8.8.8.8"])
 def test_a_global_ipv6_destination_is_external(addr: str) -> None:
-    # `::ffff:10.0.0.1` (IPv4-mapped) is judged as IPv6, like Rust's `is_non_global_ipv6`.
     assert named(extract_behavior_features([connect_v6(addr)]))["dest_is_external"] == 1.0
+
+
+@pytest.mark.parametrize(
+    "addr", ["::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:192.168.1.1", "::ffff:0.0.0.0"]
+)
+def test_an_ipv4_mapped_destination_is_classified_as_its_ipv4_address(addr: str) -> None:
+    # A dual-stack socket records an IPv4 peer as `::ffff:a.b.c.d`; Rust canonicalizes it.
+    assert named(extract_behavior_features([connect_v6(addr)]))["dest_is_external"] == 0.0
 
 
 @pytest.mark.parametrize("addr", ["::1", "::", "fe80::1", "febf::1", "fc00::1", "fd12:3456::1", "ff02::1"])

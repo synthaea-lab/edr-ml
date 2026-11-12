@@ -23,9 +23,10 @@ Any change to a feature must be mirrored in both files.
 Rust is the runtime reference (the Bayes filter runs on it), decided in
 synthaea-lab/agent#230 and #203. Four rules follow from that:
 
-1. A global IPv6 destination is external. Loopback, unspecified, `fe80::/10`, `fc00::/7`
-   and `ff00::/8` are not. IPv4-mapped (`::ffff:a.b.c.d`) is NOT unwrapped: like Rust's
-   `is_non_global_ipv6`, it is judged as an IPv6 address, so it counts as external.
+1. An IPv6 destination is external unless it is loopback, unspecified, `fe80::/10`,
+   `fc00::/7` or `ff00::/8`. An IPv4-mapped address (`::ffff:a.b.c.d`, what a dual-stack
+   socket records for an IPv4 peer) is classified as its IPv4 address, like Rust's
+   `IpAddr::to_canonical`: `::ffff:10.0.0.1` is internal, `::ffff:8.8.8.8` is external.
 2. `0.0.0.0` and `::` are internal.
 3. The suspicious-path match lowercases with ASCII rules only (Rust `to_ascii_lowercase`),
    never Unicode: U+212A KELVIN SIGN must not fold to `k`.
@@ -95,9 +96,13 @@ def _is_external(e: dict[str, Any]) -> bool:
     be judged, and an invented answer would be worse than none."""
     if e.get("is_ipv6", False) or e.get("daddr_v6") is not None:
         try:
-            return not _is_non_global_ipv6(e["daddr_v6"])
+            v6 = ipaddress.IPv6Address(e["daddr_v6"])
         except (KeyError, TypeError, ValueError):
             return False
+        mapped = v6.ipv4_mapped
+        if mapped is not None:
+            return not _is_private_ipv4(list(mapped.packed))
+        return not _is_non_global_ipv6(str(v6))
     return not _is_private_ipv4(e.get("daddr_v4", [0, 0, 0, 0]))
 
 

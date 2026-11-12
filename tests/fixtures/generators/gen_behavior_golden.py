@@ -113,7 +113,11 @@ CASES: dict[str, list[dict]] = {
     "connect_ipv6_unique_local": [cn6(0, "fd12:3456:789a::1", 443)],
     "connect_ipv6_multicast": [cn6(0, "ff02::1", 443)],
     "connect_ipv6_site_local_is_global": [cn6(0, "fec0::1", 443)],
-    "connect_ipv6_v4_mapped_private_is_external": [cn6(0, "::ffff:10.0.0.1", 443)],
+    # IPv4-mapped: classified as the IPv4 address (Rust `to_canonical`), not as IPv6.
+    "connect_ipv6_v4_mapped_private_is_internal": [cn6(0, "::ffff:10.0.0.1", 443)],
+    "connect_ipv6_v4_mapped_loopback_is_internal": [cn6(0, "::ffff:127.0.0.1", 443)],
+    "connect_ipv6_v4_mapped_unspecified_is_internal": [cn6(0, "::ffff:0.0.0.0", 443)],
+    "connect_ipv6_v4_mapped_public_is_external": [cn6(0, "::ffff:8.8.8.8", 443)],
     "connect_ipv6_internal_then_global": [cn6(0, "fe80::1", 80), cn6(5, "2606:4700:4700::1111", 80)],
     # agent#203 case 2: the unspecified IPv4 address is internal, `0.x.x.x` is not.
     "connect_unspecified_ipv4": [cn(0, [0, 0, 0, 0], 22)],
