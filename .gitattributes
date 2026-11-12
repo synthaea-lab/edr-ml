@@ -12,4 +12,7 @@ datasets/**/manifest.json text eol=lf
 tests/fixtures/**/*.jsonl text eol=lf
 tests/fixtures/**/*.json text eol=lf
 
+# model_record.json is hashed by the release gate: keep its committed bytes LF too (#8).
+registry/**/model_record.json text eol=lf
+
 *.onnx binary
