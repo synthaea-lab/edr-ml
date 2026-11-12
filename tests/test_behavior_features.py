@@ -5,12 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from synthaea_ml.features.behavior import (
-    O_CREAT,
-    O_WRONLY,
-    extract_behavior_features,
-    zero_behavior_features,
-)
+from synthaea_ml.features.behavior import extract_behavior_features, zero_behavior_features
+from synthaea_ml.features.posix import O_CREAT, O_WRONLY
 
 # The order of `BehaviorVector::to_vec()`, as documented by `extract_behavior_features`.
 BEHAVIOR_FEATURE_NAMES = (

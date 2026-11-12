@@ -78,8 +78,8 @@ reproduced individually. A mutation that raises `ValueError` is skipped.
 ### The card
 
 For each mutation, both scores are recorded with their difference. A sample is **detected** when
-its score is at or below the threshold (default 0, the forest's decision boundary; the site rarity
-floor passes each model's calibrated threshold), and a mutation **escaped** when the original was
+its score is at or below the threshold (default 0, the forest's decision boundary; the trainers
+and the site rarity floor pass each model's calibrated threshold), and a mutation **escaped** when the original was
 detected and the mutated score is above the threshold.
 
 | Field | Meaning |
@@ -93,6 +93,8 @@ detected and the mutated score is above the threshold.
 If no sample was detected before mutation, the evaluation raises `ValueError`: an escape rate on
 nothing is undefined, and the usual cause is a benign file passed as the events source.
 [`tests/test_robustness_snapshot.py`](../tests/test_robustness_snapshot.py) pins a full card.
+The provenance gate re-checks `scenario_yaml_sha256` against the sidecar on disk, so a card
+computed against a scenario that has since changed fails it ([registry.md](registry.md#provenance-gate)).
 
 ### The gate
 
