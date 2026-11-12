@@ -12,7 +12,7 @@ Each event is a dict with at minimum the "type" key:
     fileopen: {"type": "fileopen", "ts_ns": int, "flags": int}
 
 Fileopen flags (POSIX):
-    O_ACCMODE = 0o3, O_WRONLY = 0o1, O_RDWR = 0o2, O_CREAT = 0o100
+    O_ACCMODE = 0o3, O_WRONLY = 0o1, O_RDWR = 0o2, O_CREAT = 0o100, O_TRUNC = 0o1000
 
 This extraction is in 1-to-1 correspondence with the
 `CorrelationEngine::behavior_vector_for_pid` method of crates/synthaea-correlator/src/lib.rs.
