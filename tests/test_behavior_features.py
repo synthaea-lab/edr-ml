@@ -123,7 +123,7 @@ def exec_with(image_path: str | None, cmdline: str) -> dict:
 
 def test_suspicious_path_lowercasing_is_ascii_only() -> None:
     # U+212A KELVIN SIGN: `str.lower()` folds it to `k`, so `DESKTOP` would match `desktop`.
-    kelvin = exec_with("C:\\Users\\x\\DESK\u212aTOP\\a.exe", "a.exe")
+    kelvin = exec_with("C:\\Users\\x\\DES\u212aTOP\\a.exe", "a.exe")
     ascii_ = exec_with("C:\\Users\\x\\DESKTOP\\a.exe", "a.exe")
     assert named(extract_behavior_features([kelvin]))["is_suspicious_path"] == 0.0
     assert named(extract_behavior_features([ascii_]))["is_suspicious_path"] == 1.0

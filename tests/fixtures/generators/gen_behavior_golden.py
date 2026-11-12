@@ -119,8 +119,8 @@ CASES: dict[str, list[dict]] = {
     "connect_unspecified_ipv4": [cn(0, [0, 0, 0, 0], 22)],
     "connect_zero_first_octet_not_unspecified": [cn(0, [0, 1, 2, 3], 22)],
     # agent#203 case 3: ASCII-only lowercasing. U+212A KELVIN SIGN folds to `k` under
-    # Unicode `str.lower()` (DESK<kelvin>TOP would match `desktop`); it must not.
-    "path_ascii_only_kelvin_sign": [exi(0, "C:\\Users\\bob\\DESK\u212aTOP\\run.exe", "run.exe\0")],
+    # Unicode `str.lower()` (DES<kelvin>TOP would match `desktop`); it must not.
+    "path_ascii_only_kelvin_sign": [exi(0, "C:\\Users\\bob\\DES\u212aTOP\\run.exe", "run.exe\0")],
     "path_ascii_uppercase_still_matches": [exi(0, "C:\\Users\\bob\\DESKTOP\\run.exe", "run.exe\0")],
     # agent#203 case 3: the path is `image_path`, not argv0 of `cmdline` (`exec -a`).
     "path_image_path_wins_over_argv0_suspicious_image": [
