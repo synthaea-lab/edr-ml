@@ -34,7 +34,8 @@ compatible.
 Renamed from `training.json` to `model_record.json` in ADR-0009 (schema v2 bump
 carried the widening from dataset-only binding to dataset+replay binding).
 
-Exits non-zero on the first violation.
+Every model is verified and each failure reported; the exit status is non-zero when any
+model failed.
 
 Usage: python -m synthaea_ml.export.verify_onnx [model.onnx ...]
 Defaults to every `model.onnx` under ml/registry/.
@@ -46,6 +47,7 @@ import argparse
 import os
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -60,10 +62,6 @@ from synthaea_ml.registry.provenance import verify_training_record
 
 REGISTRY = Path(__file__).resolve().parents[2] / "registry"
 BASELINES = Path(__file__).resolve().parents[2] / "datasets" / "baselines"
-# Scenarios live in the sibling `scenarios` repo (synthaea-lab/scenarios, checked out as
-# `<root>/scenarios/`). Introduced by ADR-0009: replays bind to their source yaml by
-# content hash, and this constant is where verify_training_record looks them up.
-SCENARIOS = siblings.path("scenarios", "scenarios")
 
 _STRICT_PROVENANCE_ENV = "SYNTHAEA_STRICT_PROVENANCE"
 
@@ -73,8 +71,20 @@ _PLATFORM_SAMPLES: dict[str, dict[str, str]] = {
 }
 
 
-class VerificationError(AssertionError):
+class VerificationError(Exception):
     """A shipped model failed a property the agent depends on."""
+
+
+@dataclass(frozen=True)
+class VerificationReport:
+    """What `verify` checked on one model: its signature and the score of each sanity sample,
+    in the order of `samples`."""
+
+    model_path: Path
+    input_name: str
+    output_names: list[str]
+    samples: dict[str, str]
+    scores: list[float]
 
 
 def _platform_from_training_record(model_dir: Path) -> str | None:
@@ -129,12 +139,15 @@ def sanity_samples_for(model_dir: Path) -> dict[str, str]:
     return _PLATFORM_SAMPLES[platform]
 
 
-def verify(model_path: Path) -> None:
+def verify(model_path: Path) -> VerificationReport:
+    """Check the properties the agent relies on (see the module docstring).
+
+    Raises:
+        VerificationError: On the first property the model breaks.
+    """
     session = ort.InferenceSession(str(model_path))
     input_name = session.get_inputs()[0].name
     output_names = [o.name for o in session.get_outputs()]
-    print(f"{model_path}: input {input_name}, outputs {output_names}")
-
     if "scores" not in output_names:
         raise VerificationError(f"{model_path}: no 'scores' output (got {output_names})")
 
@@ -163,10 +176,22 @@ def verify(model_path: Path) -> None:
                 f"labels={labels.tolist()} scores={scores.round(4).tolist()}"
             )
 
-    for (label, cmdline), score in zip(samples.items(), scores, strict=True):
+    return VerificationReport(
+        model_path=model_path,
+        input_name=input_name,
+        output_names=output_names,
+        samples=samples,
+        scores=[float(score) for score in scores],
+    )
+
+
+def print_report(report: VerificationReport) -> None:
+    """Print what `verify` found on one model that passed."""
+    print(f"{report.model_path}: input {report.input_name}, outputs {report.output_names}")
+    for label, score in zip(report.samples, report.scores, strict=True):
         verdict = "ANOMALY" if score < 0 else "normal"
         print(f"  {label}: score={score:+.4f} -> {verdict}")
-    print(f"  ok: {len(scores)} samples, finite, deterministic, label/score consistent")
+    print(f"  ok: {len(report.scores)} samples, finite, deterministic, label/score consistent")
 
 
 def verify_provenance(
@@ -239,11 +264,15 @@ def run(models: Sequence[Path]) -> int:
         )
         return 1
     strict = _is_strict_provenance()
+    # Scenarios live in the sibling `scenarios` repo (ADR-0009: replays bind to their source
+    # yaml by content hash). Resolved here, not at import, so `SYNTHAEA_ROOT` is read when the
+    # command runs.
+    scenarios = siblings.path("scenarios", "scenarios")
     failures = 0
     for model in targets:
         try:
-            verify(model)
-            verify_provenance(model.parent, BASELINES, SCENARIOS, strict=strict)
+            print_report(verify(model))
+            verify_provenance(model.parent, BASELINES, scenarios, strict=strict)
         except VerificationError as e:
             print(f"FAIL {e}", file=sys.stderr)
             failures += 1
