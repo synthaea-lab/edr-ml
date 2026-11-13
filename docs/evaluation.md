@@ -29,9 +29,13 @@ The result also records the sidecar's SHA-256, the time, and the environment
 (`platform.system()`, `platform.release()`, `platform.machine()`). Techniques that fired but are
 not expected are ignored.
 
-`run_replay` does not run the scenario; it starts from an `alerts.ndjson` produced elsewhere. No
-command-line entry point calls it yet, and no trainer writes replays into a record. When a record
-does carry replays, the provenance gate re-verifies them ([registry.md](registry.md#provenance-gate)).
+`run_replay` does not run the scenario; it starts from an `alerts.ndjson` produced elsewhere (the
+lab rig). `synthaea-ml-replay-record` (`synthaea_ml/evaluation/replay_cli.py`) is the entry point
+that calls it: given a model version directory and one or more `--replay <scenario.yaml>
+<alerts.ndjson>` pairs, it replays each and writes the results into that record's
+`scenario_replays` (`--append` adds to them instead of replacing). Training does not do this,
+since the runs happen outside Python. When a record carries replays, the provenance gate
+re-verifies them ([registry.md](registry.md#provenance-gate)).
 
 ## Robustness
 

@@ -177,6 +177,23 @@ def write_training_record(
         feature_bounds=feature_bounds,
     )
 
+    write_record(model_dir, record)
+    return record
+
+
+def write_record(model_dir: Path, record: TrainingRecord) -> None:
+    """Write ``record`` to ``model_dir/model_record.json`` as the hashed on-disk bytes.
+
+    Writes an existing :class:`TrainingRecord` verbatim, unlike
+    :func:`write_training_record`, which builds a fresh record (and stamps ``trained_at``
+    and ``schema_version``). Use this to amend one field of a record already on disk, e.g.
+    binding scenario replays after training.
+
+    Raises:
+        FileNotFoundError: If ``model_dir`` does not exist.
+    """
+    if not model_dir.is_dir():
+        raise FileNotFoundError(f"model_dir does not exist: {model_dir}")
     # The release gate hashes these bytes, so they must not depend on the OS that wrote
     # them: text mode alone would write CRLF on Windows (#8).
     (model_dir / MODEL_RECORD_FILENAME).write_text(
@@ -184,7 +201,6 @@ def write_training_record(
         encoding="utf-8",
         newline="\n",
     )
-    return record
 
 
 # ── Read ────────────────────────────────────────────────────────────────────
