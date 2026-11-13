@@ -113,3 +113,15 @@ def test_golden_covers_all_intensities() -> None:
         expected_intensities = {"light", "medium", "heavy"}
         assert intensities >= expected_intensities, \
             f"mutator {mutator!r} missing intensities: {expected_intensities - intensities}"
+
+
+def test_intensity_enum_values_match_the_wire_strings() -> None:
+    # The StrEnum must serialize and compare exactly like the bare strings it replaced,
+    # or the record's MutationTestResult.intensity and the parity golden would drift (#37).
+    from synthaea_ml.evaluation.mutations import Intensity
+
+    assert [i.value for i in Intensity] == ["light", "medium", "heavy"]
+    assert Intensity.LIGHT == "light"
+    import json
+
+    assert json.dumps(Intensity.HEAVY) == '"heavy"'

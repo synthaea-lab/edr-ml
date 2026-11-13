@@ -5,6 +5,7 @@ Same constants (Knuth's 64-bit LCG), same seed default — Python and Rust
 tests can share fixture expectations.
 """
 
+from collections.abc import Sequence
 from typing import TypeVar
 
 T = TypeVar("T")
@@ -41,8 +42,8 @@ class LCG:
         """
         return low + ((self.next() >> 33) % (high - low))
 
-    def choice(self, items: list[T]) -> T:
-        """Select random item from list.
+    def choice(self, items: Sequence[T]) -> T:
+        """Select random item from a sequence.
 
         Args:
             items: Non-empty list.

@@ -11,7 +11,7 @@ All mutators test robustness of lineage features against evasion attempts.
 import copy
 from typing import Any, ClassVar
 
-from .base import Mutator
+from .base import Intensity, Mutator
 from .prng import LCG
 
 
@@ -91,7 +91,7 @@ class FakeParentNameMutator(Mutator):
     def mutation_class_name(self) -> str:
         return "fake_parent_name"
 
-    def mutate(self, record: dict[str, Any], intensity: str, rng: LCG) -> dict[str, Any]:
+    def mutate(self, record: dict[str, Any], intensity: Intensity, rng: LCG) -> dict[str, Any]:
         mutated = copy.deepcopy(record)
 
         # Only mutate if parent_comm exists (some events may lack lineage)
@@ -99,21 +99,21 @@ class FakeParentNameMutator(Mutator):
             return mutated
 
         platform = _platform_of(mutated)
-        if intensity == "light":
+        if intensity == Intensity.LIGHT:
             # Most common benign parent for the platform
             candidates = _for_platform(
                 {"unix": ["systemd"], "windows": ["explorer.exe"]},
                 platform,
                 ["systemd", "explorer.exe"],
             )
-        elif intensity == "medium":
+        elif intensity == Intensity.MEDIUM:
             # Context-appropriate parents (shells, init, service managers)
             candidates = _for_platform(
                 {"unix": self.UNIX_PARENTS[:3], "windows": self.WINDOWS_PARENTS[:3]},
                 platform,
                 self.BENIGN_PARENTS[:5],
             )
-        elif intensity == "heavy":
+        elif intensity == Intensity.HEAVY:
             # Full pool of legitimate names for the platform
             candidates = _for_platform(
                 {"unix": self.UNIX_PARENTS, "windows": self.WINDOWS_PARENTS},
@@ -171,18 +171,18 @@ class ParentPathMutator(Mutator):
     def mutation_class_name(self) -> str:
         return "parent_path"
 
-    def mutate(self, record: dict[str, Any], intensity: str, rng: LCG) -> dict[str, Any]:
+    def mutate(self, record: dict[str, Any], intensity: Intensity, rng: LCG) -> dict[str, Any]:
         mutated = copy.deepcopy(record)
 
         # Only mutate if parent_image_path exists
         if "parent_image_path" not in mutated or mutated["parent_image_path"] is None:
             return mutated
 
-        if intensity == "light":
+        if intensity == Intensity.LIGHT:
             candidates = self.SYSTEM_PATHS + self.SUSPICIOUS_PATHS
-        elif intensity == "medium":
+        elif intensity == Intensity.MEDIUM:
             candidates = self.SYSTEM_PATHS
-        elif intensity == "heavy":
+        elif intensity == Intensity.HEAVY:
             platform = _platform_of(mutated)
             candidates = _for_platform(
                 {
@@ -217,18 +217,18 @@ class RemoveLineageMutator(Mutator):
     def mutation_class_name(self) -> str:
         return "remove_lineage"
 
-    def mutate(self, record: dict[str, Any], intensity: str, rng: LCG) -> dict[str, Any]:
+    def mutate(self, record: dict[str, Any], intensity: Intensity, rng: LCG) -> dict[str, Any]:
         mutated = copy.deepcopy(record)
 
-        if intensity == "light":
+        if intensity == Intensity.LIGHT:
             # Remove parent_comm only
             if "parent_comm" in mutated:
                 mutated["parent_comm"] = None
-        elif intensity == "medium":
+        elif intensity == Intensity.MEDIUM:
             # Remove parent_image_path only
             if "parent_image_path" in mutated:
                 mutated["parent_image_path"] = None
-        elif intensity == "heavy":
+        elif intensity == Intensity.HEAVY:
             # Remove both (complete lineage strip)
             if "parent_comm" in mutated:
                 mutated["parent_comm"] = None
@@ -241,8 +241,8 @@ class RemoveLineageMutator(Mutator):
 
 
 # Export all T1-tier lineage mutators
-ALL_LINEAGE_MUTATORS = [
+ALL_LINEAGE_MUTATORS = (
     FakeParentNameMutator(),
     ParentPathMutator(),
     RemoveLineageMutator(),
-]
+)
