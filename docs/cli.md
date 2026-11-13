@@ -17,6 +17,7 @@ that `verify_onnx` scans, resolve from there.
 | [`synthaea-ml-train-site-model`](#synthaea-ml-train-site-model) | `training.train_site_model` | Retrain a T0 model on a site corpus |
 | [`synthaea-ml-train-site-rarity`](#synthaea-ml-train-site-rarity) | `training.train_site_rarity` | Site model with the rarity features, behind floor checks |
 | [`synthaea-ml-calibrate-llr`](#synthaea-ml-calibrate-llr) | `calibration.calibrate_llr` | Empirical likelihood ratios for the correlator |
+| [`synthaea-ml-record-replay`](#synthaea-ml-record-replay) | `evaluation.record_replay` | Record a scenario run in a model record |
 | [`synthaea-ml-robustness`](#synthaea-ml-robustness) | `evaluation.robustness_cli` | Gate and report on robustness cards |
 | [`synthaea-ml-t1-lineage-gain`](#synthaea-ml-t1-lineage-gain) | `evaluation.t1_lineage_gain` | Measure what lineage features add to T1 |
 | [`synthaea-ml-verify-onnx`](#synthaea-ml-verify-onnx) | `export.verify_onnx` | Runtime and provenance check of registry models |
@@ -139,6 +140,21 @@ synthaea-ml-calibrate-llr [--events PATH] [--alerts PATH] [--window SECONDS] [--
 Defaults: `events.jsonl`, `alerts.ndjson`, a 60 s window, at least 1 malicious pid. Writes the
 report to `--out`, or stdout. Exit 1 when the alerts name fewer malicious pids than `--min-mal`.
 See [calibration.md](calibration.md#likelihood-ratio-calibration).
+
+### `synthaea-ml-record-replay`
+
+```text
+synthaea-ml-record-replay --model-dir DIR --scenario NAME --alerts PATH
+    [--scenarios-root DIR] [--environment OS KERNEL ARCH]
+```
+
+Matches the `alerts.ndjson` of a run of scenario `NAME` against its sidecar
+(`--scenarios-root`, default the `scenarios` sibling checkout's `scenarios/`) and adds the replay
+to `model_record.json`, replacing an earlier replay of the same scenario in the same environment.
+`--environment` names the machine the scenario ran on (a rig VM); without it, this machine is
+recorded. Prints the outcome and exits 0 whether the replay passed or failed. Exit 1 if the
+record, the sidecar or the alerts are missing, or the sidecar's `name` is not `NAME`. See
+[evaluation.md](evaluation.md#recording-a-replay).
 
 ### `synthaea-ml-robustness`
 

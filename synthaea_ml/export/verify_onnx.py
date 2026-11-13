@@ -63,7 +63,7 @@ BASELINES = Path(__file__).resolve().parents[2] / "datasets" / "baselines"
 # Scenarios live in the sibling `scenarios` repo (synthaea-lab/scenarios, checked out as
 # `<root>/scenarios/`). Introduced by ADR-0009: replays bind to their source yaml by
 # content hash, and this constant is where verify_training_record looks them up.
-SCENARIOS = siblings.path("scenarios", "scenarios")
+SCENARIOS = siblings.scenario_sidecars()
 
 _STRICT_PROVENANCE_ENV = "SYNTHAEA_STRICT_PROVENANCE"
 
