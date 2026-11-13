@@ -25,10 +25,11 @@ from synthaea_ml.registry.training_record import (
     verify_training_record,
 )
 from synthaea_ml.training import pipeline, train_behavior
+from synthaea_ml.units import NS_PER_SECOND
 
 _START = datetime(2026, 10, 2, 10, 0, 0, tzinfo=UTC)
 _END = datetime(2026, 10, 2, 11, 0, 0, tzinfo=UTC)
-S = 1_000_000_000
+S = NS_PER_SECOND
 SCENARIO = sibling("scenarios", "scenarios", "beacon.yaml")
 
 

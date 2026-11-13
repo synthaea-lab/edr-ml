@@ -16,8 +16,9 @@ from helpers import write_jsonl
 
 from synthaea_ml.evaluation import t1_lineage_gain as gain
 from synthaea_ml.features import t1
+from synthaea_ml.units import NS_PER_SECOND
 
-S = 1_000_000_000
+S = NS_PER_SECOND
 LINEAGE_COLUMNS = slice(gain.BASELINE_FEATURE_COUNT, gain.MEASURED_FEATURE_COUNT)
 
 

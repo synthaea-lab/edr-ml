@@ -12,9 +12,10 @@ import pytest
 from helpers import read_golden_jsonl
 
 from synthaea_ml.data.aggregate_correlation import charger_events, vecteurs_par_pid
+from synthaea_ml.units import NS_PER_SECOND
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-S = 1_000_000_000
+S = NS_PER_SECOND
 
 
 def golden_rows() -> list[dict]:

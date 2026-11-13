@@ -96,6 +96,7 @@ from synthaea_ml.training.pipeline import (
     fit_calibrated_forest,
     write_scorer_metadata,
 )
+from synthaea_ml.units import NS_PER_HOUR
 
 logger = logging.getLogger(__name__)
 
@@ -452,7 +453,7 @@ def parse_args(argv: Sequence[str] | None = None) -> SiteRarityArgs:
     parser.add_argument(
         "--interval-hours",
         type=float,
-        default=DEFAULT_INTERVAL_NS / 3_600_000_000_000,
+        default=DEFAULT_INTERVAL_NS / NS_PER_HOUR,
         help="Cadence of published snapshots.",
     )
     parser.add_argument(
@@ -555,7 +556,7 @@ def _require_floor(floor: FloorResult, summary: str, label: str) -> None:
 def _load_matrices(args: SiteRarityArgs) -> SiteMatrices:
     """The corpus's time-ordered matrices; refuses a corpus too small to split."""
     records = load_corpus(args.site_corpus)
-    interval_ns = int(args.interval_hours * 3_600_000_000_000)
+    interval_ns = int(args.interval_hours * NS_PER_HOUR)
     x_base, x_rare, known = build_matrices(records, args.k, args.min_hosts, interval_ns)
     if len(x_rare) < MIN_ROWS:
         raise ValueError(

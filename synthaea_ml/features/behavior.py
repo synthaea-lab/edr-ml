@@ -42,6 +42,7 @@ import ipaddress
 from typing import Any
 
 from synthaea_ml.features.posix import has_write_intent
+from synthaea_ml.units import NS_PER_MILLISECOND
 
 # ── Rust mirror constants ──────────────────────────────────────────────────────
 
@@ -140,12 +141,12 @@ def extract_behavior_features(events: list[dict[str, Any]]) -> list[float]:
     first_filewrite_ns = write_events[0]["ts_ns"] if write_events else None
 
     if first_exec_ns is not None and first_connect_ns is not None:
-        time_exec_to_connect_ms = max(0.0, (first_connect_ns - first_exec_ns) / 1_000_000)
+        time_exec_to_connect_ms = max(0.0, (first_connect_ns - first_exec_ns) / NS_PER_MILLISECOND)
     else:
         time_exec_to_connect_ms = 0.0
 
     if first_exec_ns is not None and first_filewrite_ns is not None:
-        time_exec_to_filewrite_ms = max(0.0, (first_filewrite_ns - first_exec_ns) / 1_000_000)
+        time_exec_to_filewrite_ms = max(0.0, (first_filewrite_ns - first_exec_ns) / NS_PER_MILLISECOND)
     else:
         time_exec_to_filewrite_ms = 0.0
 

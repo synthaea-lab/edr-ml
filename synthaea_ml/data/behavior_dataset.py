@@ -22,8 +22,9 @@ from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
 from synthaea_ml.data.records import FlatEvent
 from synthaea_ml.data.wire import RAW_EVENT_TYPES, flatten_wire_event
 from synthaea_ml.features import correlation
+from synthaea_ml.units import NS_PER_SECOND
 
-DEFAULT_WINDOW_NS = 60 * 1_000_000_000
+DEFAULT_WINDOW_NS = 60 * NS_PER_SECOND
 
 
 def load_events(path: Path) -> list[FlatEvent]:
