@@ -43,6 +43,7 @@ from synthaea_ml.data.manifest import CORRELATION_DATASET_FILENAME
 from synthaea_ml.data.records import CorrelationVector, FlatEvent
 from synthaea_ml.data.wire import RAW_EVENT_TYPES, flatten_wire_event
 from synthaea_ml.features.correlation import FEATURE_NAMES, extract_features
+from synthaea_ml.units import NS_PER_SECOND
 
 # Re-exported: callers imported the wire translator from here before `data/wire.py`.
 __all__ = [
@@ -159,7 +160,7 @@ def run(args: AggregateCorrelationArgs) -> int:
         print("[error] no usable events in the log.", file=sys.stderr)
         return 1
 
-    vecteurs = vecteurs_par_pid(events, int(args.window_s * 1_000_000_000), args.min_events)
+    vecteurs = vecteurs_par_pid(events, int(args.window_s * NS_PER_SECOND), args.min_events)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as f:
         for v in vecteurs:

@@ -25,6 +25,7 @@ or `O_CREAT`) happens here, exactly mirroring `schema::has_write_intent` on the 
 
 from synthaea_ml.data.records import FlatEvent
 from synthaea_ml.features.posix import has_write_intent
+from synthaea_ml.units import NS_PER_SECOND
 
 FEATURE_NAMES = [
     "spawn_count",
@@ -103,7 +104,7 @@ def extract_features(
     if pid_events:
         span_s = (
             max(e["ts_ns"] for e in pid_events) - min(e["ts_ns"] for e in pid_events)
-        ) / 1_000_000_000.0
+        ) / NS_PER_SECOND
     else:
         span_s = 0.0
 
