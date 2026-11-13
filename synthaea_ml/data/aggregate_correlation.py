@@ -30,7 +30,6 @@ Without `--out`, the vectors go to `LEGACY_OUT_PATH` inside the package, where
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import warnings
 from collections import defaultdict
@@ -38,7 +37,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
+from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl, write_jsonl
 from synthaea_ml.data.manifest import CORRELATION_DATASET_FILENAME
 from synthaea_ml.data.records import CorrelationVector, FlatEvent
 from synthaea_ml.data.wire import RAW_EVENT_TYPES, flatten_wire_event
@@ -162,9 +161,7 @@ def run(args: AggregateCorrelationArgs) -> int:
 
     vecteurs = vecteurs_par_pid(events, int(args.window_s * NS_PER_SECOND), args.min_events)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open("w", encoding="utf-8") as f:
-        for v in vecteurs:
-            f.write(json.dumps(v) + "\n")
+    write_jsonl(args.out, vecteurs)
 
     print(
         f"{len(events)} events → {len(vecteurs)} vectors "

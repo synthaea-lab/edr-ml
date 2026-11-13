@@ -110,6 +110,22 @@ def test_manifest_json_is_sorted_and_indented(tmp_path: Path) -> None:
     assert "\n  " in raw  # indent=2 present
 
 
+def test_manifest_json_bytes_have_lf_line_endings_on_every_platform(tmp_path: Path) -> None:
+    """A committed manifest is LF (`.gitattributes`): one written on Windows must match it."""
+    _write_baseline(tmp_path, ['{"argv": ["ls"]}'])
+    write_manifest(
+        tmp_path,
+        platform="windows",
+        os_version="11",
+        workload_label="dev",
+        capture_start=_START,
+        capture_end=_END,
+        hostname="solkapc",
+    )
+
+    assert b"\r" not in (tmp_path / MANIFEST_FILENAME).read_bytes()
+
+
 def test_write_manifest_skips_blank_lines_in_sample_count(tmp_path: Path) -> None:
     _write_baseline(
         tmp_path,

@@ -32,6 +32,7 @@ from synthaea_ml.calibration import (
     compute_feature_bounds,
 )
 from synthaea_ml.evaluation.robustness import run_robustness_evaluation
+from synthaea_ml.lf_text import write_lf_text
 from synthaea_ml.registry.records import RobustnessCard
 from synthaea_ml.training.config import (
     CALIBRATION,
@@ -104,7 +105,7 @@ def write_scorer_metadata(
             "max_values": bounds.max_values,
         },
     }
-    path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    write_lf_text(path, json.dumps(metadata, indent=2) + "\n")
 
 
 def evaluate_robustness(

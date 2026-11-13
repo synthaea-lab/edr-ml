@@ -1,4 +1,5 @@
-"""`iter_jsonl`, the one JSON-Lines reader, and the policy each caller states for bad lines."""
+"""`iter_jsonl`, the one JSON-Lines reader, and the policy each caller states for bad lines;
+`write_jsonl`, the writer of hashed baselines."""
 
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from synthaea_ml.data.jsonl import InvalidJsonlLineError, InvalidLine, iter_jsonl
+from synthaea_ml.data.jsonl import InvalidJsonlLineError, InvalidLine, iter_jsonl, write_jsonl
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -122,3 +123,20 @@ def test_undecodable_bytes_raise_unless_replaced(tmp_path: Path) -> None:
     with pytest.raises(UnicodeDecodeError):
         list(iter_jsonl(path))
     assert list(iter_jsonl(path, encoding_errors="replace")) == [{"cmdline": "a�b"}]
+
+
+def test_write_jsonl_writes_one_object_per_line_with_lf_endings(tmp_path: Path) -> None:
+    path = tmp_path / "baseline.jsonl"
+
+    write_jsonl(path, [{"argv": ["ls"]}, {"argv": ["id"]}])
+
+    assert path.read_bytes() == b'{"argv": ["ls"]}\n{"argv": ["id"]}\n'
+
+
+def test_write_jsonl_round_trips_through_iter_jsonl(tmp_path: Path) -> None:
+    path = tmp_path / "baseline.jsonl"
+    records = [{"n": 1}, {"text": "a\nb"}]
+
+    write_jsonl(path, records)
+
+    assert list(iter_jsonl(path)) == records
