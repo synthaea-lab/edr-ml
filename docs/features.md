@@ -58,8 +58,10 @@ events:
 | 7 | `event_count` | Events of the process in the window |
 
 - **Write intent** mirrors the agent's `schema::has_write_intent`: the 2-bit access mode
-  (`flags & O_ACCMODE`) is `O_WRONLY` or `O_RDWR`, or `O_CREAT` is set. The invalid access mode
-  `0o3` is not a write; the kernel refuses it.
+  (`flags & O_ACCMODE`) is `O_WRONLY` or `O_RDWR`, or `O_CREAT` or `O_TRUNC` is set
+  (`O_RDONLY | O_TRUNC` empties the file on Linux,
+  [agent#233](https://github.com/synthaea-lab/agent/issues/233)). The invalid access mode `0o3`
+  is not a write; the kernel refuses it.
 - **Incarnations.** [`same_generation`](../synthaea_ml/features/correlation.py) mirrors the
   correlator: two known, different `process_generation` stamps never mix; a missing stamp on
   either side cannot disprove identity, so captures without stamps behave as pid-only.

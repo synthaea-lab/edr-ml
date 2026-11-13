@@ -11,9 +11,11 @@ O_ACCMODE: int = 0o3
 O_WRONLY: int = 0o1
 O_RDWR: int = 0o2
 O_CREAT: int = 0o100
+O_TRUNC: int = 0o1000
 
 
 def has_write_intent(flags: int) -> bool:
-    """Whether `open(2)` flags ask to write: access mode `O_WRONLY`/`O_RDWR`, or `O_CREAT`."""
+    """Whether `open(2)` flags ask to write: access mode `O_WRONLY`/`O_RDWR`, `O_CREAT`, or
+    `O_TRUNC` (`O_RDONLY | O_TRUNC` empties the file on Linux, agent#233)."""
     access_mode = flags & O_ACCMODE
-    return access_mode in (O_WRONLY, O_RDWR) or bool(flags & O_CREAT)
+    return access_mode in (O_WRONLY, O_RDWR) or bool(flags & (O_CREAT | O_TRUNC))

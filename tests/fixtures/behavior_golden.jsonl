@@ -27,6 +27,8 @@
 {"name": "no_write_invalid_access_mode", "events": [{"type": "fileopen", "ts_ns": 0, "flags": 3}], "features": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}
 {"name": "write_invalid_mode_with_creat", "events": [{"type": "fileopen", "ts_ns": 0, "flags": 67}], "features": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}
 {"name": "write_high_bits_only_rdonly", "events": [{"type": "fileopen", "ts_ns": 0, "flags": 524288}], "features": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}
+{"name": "write_trunc_with_rdonly", "events": [{"type": "fileopen", "ts_ns": 0, "flags": 512}], "features": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}
+{"name": "write_invalid_mode_with_trunc", "events": [{"type": "fileopen", "ts_ns": 0, "flags": 515}], "features": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}
 {"name": "dropper", "events": [{"type": "exec", "ts_ns": 0, "cmdline": "C:\\Users\\victim\\AppData\\Roaming\\payload.exe\u0000"}, {"type": "connect", "ts_ns": 500000000, "daddr_v4": [8, 8, 8, 8], "dport": 4444, "is_ipv6": false}, {"type": "connect", "ts_ns": 600000000, "daddr_v4": [8, 8, 8, 8], "dport": 443, "is_ipv6": false}, {"type": "fileopen", "ts_ns": 1000000000, "flags": 65}], "features": [1.0, 1.0, 1.0, 500.0, 1000.0, 1.0, 2.0, 2.0, 1.0]}
 {"name": "delay_connect_before_exec_clamped", "events": [{"type": "connect", "ts_ns": 0, "daddr_v4": [8, 8, 8, 8], "dport": 80, "is_ipv6": false}, {"type": "exec", "ts_ns": 500000000, "cmdline": "/bin/sh\u0000"}], "features": [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0]}
 {"name": "delay_write_before_exec_clamped", "events": [{"type": "fileopen", "ts_ns": 0, "flags": 1}, {"type": "exec", "ts_ns": 500000000, "cmdline": "/bin/sh\u0000"}], "features": [1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}

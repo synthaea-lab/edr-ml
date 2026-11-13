@@ -19,7 +19,7 @@ Expected input format: a list of JSON-Lines events, one object per event, as pro
 `connect`-only.
 
 `flags` is logged raw; the filtering on write intent (access mode `O_WRONLY`/`O_RDWR`,
-or `O_CREAT`) happens here, exactly mirroring `schema::has_write_intent` on the Rust side
+or `O_CREAT`/`O_TRUNC`) happens here, exactly mirroring `schema::has_write_intent` on the Rust side
 (`features/behavior.py` applies the same test).
 """
 
@@ -41,7 +41,7 @@ FEATURE_NAMES = [
 
 def _is_file_write(event: FlatEvent) -> bool:
     """Mirror of `schema::has_write_intent` (Rust, the ONE definition): a `fileopen`
-    whose access mode is `O_WRONLY`/`O_RDWR`, or that carries `O_CREAT`. The access
+    whose access mode is `O_WRONLY`/`O_RDWR`, or that carries `O_CREAT` or `O_TRUNC`. The access
     mode is a 2-bit *field* (`O_ACCMODE`), not independent bits — the invalid `0o3`
     combination is refused by the kernel (`EINVAL`), so it does not count as a write
     (this replaced a drifted bitmask test that disagreed with the Rust rules engine)."""
