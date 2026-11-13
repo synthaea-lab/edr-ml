@@ -25,6 +25,7 @@ from pathlib import Path
 
 from synthaea_ml.data.wire import normalize_for_behavior
 from synthaea_ml.features.behavior import extract_behavior_features
+from synthaea_ml.units import NS_PER_SECOND
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -379,7 +380,7 @@ def run(args: CalibrateLlrArgs) -> int:
         )
         return 1
 
-    window_ns = args.window_s * 1_000_000_000
+    window_ns = args.window_s * NS_PER_SECOND
     bv_by_pid = group_by_pid_and_window(events, window_ns)
 
     n_benign = sum(len(v) for pid, v in bv_by_pid.items() if pid not in malicious_pids)

@@ -58,6 +58,7 @@ from synthaea_ml.data.behavior_dataset import (
 from synthaea_ml.data.manifest import BEHAVIOR_CAPTURE_FILENAME
 from synthaea_ml.features import correlation, lineage, t1
 from synthaea_ml.training.config import BEHAVIOR_FOREST, BEHAVIOR_MIN_SAMPLES, CALIBRATION
+from synthaea_ml.units import NS_PER_SECOND
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +224,7 @@ def _process_edges(path: Path) -> dict[tuple[int, int | None], tuple[int, int | 
 
 # The runner records its start time once it is running, so its own exec precedes the window:
 # the root may have been first seen this long before `start_ns`.
-ROOT_LEAD_NS = 30 * 1_000_000_000
+ROOT_LEAD_NS = 30 * NS_PER_SECOND
 
 
 def descendants_of(

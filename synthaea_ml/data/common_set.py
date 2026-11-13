@@ -20,11 +20,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from synthaea_ml.features.rarity import CommonSetSnapshot, normalize_sha256
+from synthaea_ml.units import NS_PER_HOUR
 
 DEFAULT_K = 3
 """Hosts an image must have run on to be in the common set (ADR-0020's K)."""
 
-DEFAULT_INTERVAL_NS = 24 * 3600 * 1_000_000_000
+DEFAULT_INTERVAL_NS = 24 * NS_PER_HOUR
 """Cadence of published snapshots: daily, riding the content manifest (ADR-0016)."""
 
 
