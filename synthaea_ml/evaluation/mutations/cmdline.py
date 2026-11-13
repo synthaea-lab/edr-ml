@@ -26,7 +26,7 @@ import base64
 import copy
 from typing import Any, ClassVar
 
-from .base import Mutator
+from .base import Intensity, Mutator
 from .prng import LCG
 
 
@@ -41,7 +41,7 @@ class Base64EncodeMutator(Mutator):
     def mutation_class_name(self) -> str:
         return "base64_encode"
 
-    def mutate(self, record: dict[str, Any], intensity: str, rng: LCG) -> dict[str, Any]:
+    def mutate(self, record: dict[str, Any], intensity: Intensity, rng: LCG) -> dict[str, Any]:
         if "argv" not in record or not isinstance(record["argv"], list):
             raise ValueError("record must have 'argv' list field")
 
@@ -51,11 +51,11 @@ class Base64EncodeMutator(Mutator):
         if not argv or len(argv) == 0:
             return mutated
 
-        if intensity == "light":
+        if intensity == Intensity.LIGHT:
             count = 1
-        elif intensity == "medium":
+        elif intensity == Intensity.MEDIUM:
             count = min(3, len(argv))
-        elif intensity == "heavy":
+        elif intensity == Intensity.HEAVY:
             count = len(argv)
         else:
             raise ValueError(f"invalid intensity: {intensity}")
@@ -83,7 +83,7 @@ class ArgumentReorderMutator(Mutator):
     def mutation_class_name(self) -> str:
         return "argument_reorder"
 
-    def mutate(self, record: dict[str, Any], intensity: str, rng: LCG) -> dict[str, Any]:
+    def mutate(self, record: dict[str, Any], intensity: Intensity, rng: LCG) -> dict[str, Any]:
         if "argv" not in record or not isinstance(record["argv"], list):
             raise ValueError("record must have 'argv' list field")
 
@@ -93,18 +93,18 @@ class ArgumentReorderMutator(Mutator):
         if len(argv) < 2:
             return mutated
 
-        if intensity == "light":
+        if intensity == Intensity.LIGHT:
             # Swap 2 adjacent args (skip argv[0] to preserve executable)
             if len(argv) < 3:
                 return mutated
             idx = rng.uniform(1, len(argv) - 1)
             argv[idx], argv[idx + 1] = argv[idx + 1], argv[idx]
-        elif intensity == "medium":
+        elif intensity == Intensity.MEDIUM:
             # Shuffle non-positional (keep argv[0] in place)
             if len(argv) > 1:
                 tail = argv[1:]
                 argv[1:] = rng.shuffle(tail)
-        elif intensity == "heavy":
+        elif intensity == Intensity.HEAVY:
             # Same as medium for now (argv[0] must stay fixed to preserve executable)
             # Future: could add --opt=val ↔ --opt val rewriting on top of shuffle
             if len(argv) > 1:
@@ -140,18 +140,18 @@ class PathSubstitutionMutator(Mutator):
     def mutation_class_name(self) -> str:
         return "path_substitution"
 
-    def mutate(self, record: dict[str, Any], intensity: str, rng: LCG) -> dict[str, Any]:
+    def mutate(self, record: dict[str, Any], intensity: Intensity, rng: LCG) -> dict[str, Any]:
         if "argv" not in record or not isinstance(record["argv"], list):
             raise ValueError("record must have 'argv' list field")
 
         mutated = copy.deepcopy(record)
         argv = mutated["argv"]
 
-        if intensity == "light":
+        if intensity == Intensity.LIGHT:
             max_subs = 1
-        elif intensity == "medium":
+        elif intensity == Intensity.MEDIUM:
             max_subs = 2
-        elif intensity == "heavy":
+        elif intensity == Intensity.HEAVY:
             max_subs = len(argv)
         else:
             raise ValueError(f"invalid intensity: {intensity}")
@@ -182,7 +182,7 @@ class TokenSplittingMutator(Mutator):
     def mutation_class_name(self) -> str:
         return "token_splitting"
 
-    def mutate(self, record: dict[str, Any], intensity: str, rng: LCG) -> dict[str, Any]:
+    def mutate(self, record: dict[str, Any], intensity: Intensity, rng: LCG) -> dict[str, Any]:
         if "argv" not in record or not isinstance(record["argv"], list):
             raise ValueError("record must have 'argv' list field")
 
@@ -192,11 +192,11 @@ class TokenSplittingMutator(Mutator):
         if not argv:
             return mutated
 
-        if intensity == "light":
+        if intensity == Intensity.LIGHT:
             count = 1
-        elif intensity == "medium":
+        elif intensity == Intensity.MEDIUM:
             count = min(2, len(argv))
-        elif intensity == "heavy":
+        elif intensity == Intensity.HEAVY:
             count = len(argv)
         else:
             raise ValueError(f"invalid intensity: {intensity}")
@@ -237,7 +237,7 @@ class PaddingMutator(Mutator):
     def mutation_class_name(self) -> str:
         return "padding"
 
-    def mutate(self, record: dict[str, Any], intensity: str, rng: LCG) -> dict[str, Any]:
+    def mutate(self, record: dict[str, Any], intensity: Intensity, rng: LCG) -> dict[str, Any]:
         if "argv" not in record or not isinstance(record["argv"], list):
             raise ValueError("record must have 'argv' list field")
 
@@ -247,19 +247,19 @@ class PaddingMutator(Mutator):
         if not argv:
             return mutated
 
-        if intensity == "light":
+        if intensity == Intensity.LIGHT:
             # Add one comment as an argument
             comment = rng.choice(self.COMMENTS)
             insert_idx = rng.uniform(0, len(argv) + 1)
             argv.insert(insert_idx, comment)
-        elif intensity == "medium":
+        elif intensity == Intensity.MEDIUM:
             # Add comments and pad some tokens with spaces
             comment = rng.choice(self.COMMENTS)
             argv.insert(0, comment)
             for i in range(1, len(argv)):
                 if rng.uniform(0, 2) == 0:
                     argv[i] = " " + argv[i] + " "
-        elif intensity == "heavy":
+        elif intensity == Intensity.HEAVY:
             # Extensive padding
             for _ in range(3):
                 comment = rng.choice(self.COMMENTS)
@@ -281,15 +281,19 @@ class PaddingMutator(Mutator):
 # shell-syntax evasions that don't survive exec() and are disabled until
 # moved to a shell-payload mutator. PathSubstitutionMutator is the primary
 # realistic argv-level evasion.
-ALL_T0_MUTATORS = [
+ALL_T0_MUTATORS = (
     PathSubstitutionMutator(),
     # ArgumentReorderMutator light/medium are valid (skip argv[0]),
     # but heavy reorders argv[0] which changes the executable
     ArgumentReorderMutator(),
-]
+)
 
-# Disabled mutators (apply shell-syntax to argv, unrealistic):
-# Base64EncodeMutator(),
-# TokenSplittingMutator(),
-# PaddingMutator(),
+# Defined but not in ALL_T0_MUTATORS: they apply shell-syntax evasions to argv that do not
+# survive exec(), so they belong in a shell-payload mutator, not a T0 argv one (PR #405
+# review). Named here, not run, so they stay discoverable rather than commented out.
+DISABLED_T0_MUTATORS = (
+    Base64EncodeMutator(),
+    TokenSplittingMutator(),
+    PaddingMutator(),
+)
 

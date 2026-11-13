@@ -24,7 +24,7 @@ from synthaea_ml.data.canonical import ml_cmdline_from_record
 from synthaea_ml.data.jsonl import InvalidLine, iter_jsonl
 from synthaea_ml.data.records import FlatEvent
 from synthaea_ml.data.wire import flatten_wire_event
-from synthaea_ml.evaluation.mutations.base import Mutator
+from synthaea_ml.evaluation.mutations.base import Intensity, Mutator
 from synthaea_ml.evaluation.mutations.cmdline import ALL_T0_MUTATORS
 from synthaea_ml.evaluation.mutations.prng import LCG
 from synthaea_ml.evaluation.scenario_replay import load_expected_detections
@@ -35,7 +35,7 @@ from synthaea_ml.registry.records import ExpectedDetection, MutationTestResult, 
 from synthaea_ml.timestamps import format_utc
 
 # Every mutator runs at each intensity, in this order: the LCG draws depend on it.
-_INTENSITIES = ("light", "medium", "heavy")
+_INTENSITIES = (Intensity.LIGHT, Intensity.MEDIUM, Intensity.HEAVY)
 
 # Fields of an exec record kept beside its command line: the lineage the T1 tier scores
 # and the lineage mutators rewrite, and the process identity its correlation context is
@@ -68,14 +68,14 @@ def _score_record(model: Any, record: dict[str, Any], tier: str) -> float:
     return _score_cmdline(model, ml_cmdline_from_record(record))
 
 
-def _select_mutators_for_tier(tier: str) -> list[Mutator]:
+def _select_mutators_for_tier(tier: str) -> Sequence[Mutator]:
     """Select mutators appropriate for the tier.
 
     Args:
         tier: One of "T0", "T1", "T2".
 
     Returns:
-        List of mutator instances.
+        The mutators for this tier.
 
     Raises:
         NotImplementedError: For "T2", which has no mutators yet.
