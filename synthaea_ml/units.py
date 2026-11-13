@@ -8,8 +8,11 @@ calibration and feature modules. Values are unchanged; this is a naming change o
 
 from __future__ import annotations
 
+#: Nanoseconds in one millisecond.
+NS_PER_MILLISECOND = 1_000_000
+
 #: Nanoseconds in one second.
-NS_PER_SECOND = 1_000_000_000
+NS_PER_SECOND = 1000 * NS_PER_MILLISECOND
 
 #: Nanoseconds in one hour (`3600 * NS_PER_SECOND`).
 NS_PER_HOUR = 3600 * NS_PER_SECOND
