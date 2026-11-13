@@ -217,6 +217,41 @@ def test_verify_reports_missing_manifest_as_operation_failure(tmp_path):
     assert "manifest not found" in err.lower()
 
 
+def test_verify_accepts_baseline_filename_override(tmp_path):
+    # The write/verify asymmetry fixed in #40: a legacy samples file name must be
+    # checkable from the CLI, the same way `write` already accepts it.
+    _baseline(tmp_path, name="baseline_benign.jsonl")
+    _run(
+        "write", str(tmp_path),
+        "--platform", "linux",
+        "--os-version", "22.04",
+        "--workload-label", "dev",
+        "--capture-start", "2026-09-14T09:00:00Z",
+        "--capture-end", "2026-09-14T17:00:00Z",
+        "--baseline-filename", "baseline_benign.jsonl",
+    )
+    code, out, err = _run("verify", str(tmp_path), "--baseline-filename", "baseline_benign.jsonl")
+    assert code == 0, err
+    assert "ok" in out.lower()
+
+
+def test_verify_without_the_override_misses_a_legacy_named_baseline(tmp_path):
+    # Without --baseline-filename, verify looks for the default name and fails to find it.
+    _baseline(tmp_path, name="baseline_benign.jsonl")
+    _run(
+        "write", str(tmp_path),
+        "--platform", "linux",
+        "--os-version", "22.04",
+        "--workload-label", "dev",
+        "--capture-start", "2026-09-14T09:00:00Z",
+        "--capture-end", "2026-09-14T17:00:00Z",
+        "--baseline-filename", "baseline_benign.jsonl",
+    )
+    code, _, err = _run("verify", str(tmp_path))
+    assert code == 1
+    assert "baseline not found" in err.lower()
+
+
 # --- _parse_capture_time unit tests ---------------------------------------
 
 

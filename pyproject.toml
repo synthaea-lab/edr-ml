@@ -28,7 +28,7 @@ dev = ["ruff==0.17.0", "mypy==2.4.1", "types-PyYAML==6.0.12.20261103", "pytest>=
 synthaea-ml-aggregate-correlation = "synthaea_ml.data.aggregate_correlation:main"
 synthaea-ml-calibrate-llr = "synthaea_ml.calibration.calibrate_llr:main"
 synthaea-ml-capture-to-baseline = "synthaea_ml.data.capture_to_baseline:main"
-synthaea-ml-manifest = "synthaea_ml.data.manifest:_main"
+synthaea-ml-manifest = "synthaea_ml.data.manifest:main"
 synthaea-ml-robustness = "synthaea_ml.evaluation.robustness_cli:main"
 synthaea-ml-t1-lineage-gain = "synthaea_ml.evaluation.t1_lineage_gain:main"
 synthaea-ml-train-behavior = "synthaea_ml.training.train_behavior:main"

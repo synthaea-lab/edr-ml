@@ -37,9 +37,11 @@ around `write_manifest` and `verify_manifest`, used when adding a new baseline.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import socket
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -295,16 +297,16 @@ def _parse_capture_time(s: str) -> datetime:
     return dt.astimezone(UTC)
 
 
-def _main(argv: list[str] | None = None) -> int:
-    """CLI entry point: `python -m synthaea_ml.data.manifest {write,verify}`.
+def _baseline_filename_help() -> str:
+    return (
+        f"Name of the samples file inside baseline_dir "
+        f"(default: {DEFAULT_BASELINE_FILENAME!r}). Override for legacy captures "
+        f"that keep the sensor's original file name (e.g. 'baseline_benign.jsonl')."
+    )
 
-    Returns:
-        Exit code: 0 on success, 1 on an operation failure (baseline mutated,
-        manifest missing), 2 on a usage error (unknown flag, bad datetime).
-    """
-    import argparse
-    import sys
 
+def _build_parser() -> argparse.ArgumentParser:
+    """The `{write,verify}` command line of `python -m synthaea_ml.data.manifest`."""
     parser = argparse.ArgumentParser(
         prog="synthaea_ml.data.manifest",
         description="Read and write baseline dataset manifests.",
@@ -348,11 +350,7 @@ def _main(argv: list[str] | None = None) -> int:
     write.add_argument(
         "--baseline-filename",
         default=DEFAULT_BASELINE_FILENAME,
-        help=(
-            f"Name of the samples file inside baseline_dir "
-            f"(default: {DEFAULT_BASELINE_FILENAME!r}). Override for legacy captures "
-            f"that keep the sensor's original file name (e.g. 'baseline_benign.jsonl')."
-        ),
+        help=_baseline_filename_help(),
     )
     write.add_argument(
         "--capturer-ref",
@@ -370,46 +368,65 @@ def _main(argv: list[str] | None = None) -> int:
         help="Re-hash the baseline and confirm it still matches its manifest.",
     )
     verify.add_argument("baseline_dir", type=Path)
+    verify.add_argument(
+        "--baseline-filename",
+        default=DEFAULT_BASELINE_FILENAME,
+        help=_baseline_filename_help(),
+    )
+    return parser
 
-    args = parser.parse_args(argv)
 
-    if args.cmd == "write":
-        try:
-            manifest = write_manifest(
-                args.baseline_dir,
-                platform=args.platform,
-                os_version=args.os_version,
-                workload_label=args.workload_label,
-                capture_start=args.capture_start,
-                capture_end=args.capture_end,
-                hostname=args.hostname,
-                baseline_filename=args.baseline_filename,
-                capturer_ref=args.capturer_ref,
-            )
-        except (FileNotFoundError, ValueError) as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
-        print(f"wrote {args.baseline_dir / MANIFEST_FILENAME}")
-        print(
-            f"  host_id={manifest.host_id}  "
-            f"samples={manifest.sample_count}  "
-            f"sha={manifest.sample_sha256[:12]}…"
+def _cmd_write(args: argparse.Namespace) -> int:
+    try:
+        manifest = write_manifest(
+            args.baseline_dir,
+            platform=args.platform,
+            os_version=args.os_version,
+            workload_label=args.workload_label,
+            capture_start=args.capture_start,
+            capture_end=args.capture_end,
+            hostname=args.hostname,
+            baseline_filename=args.baseline_filename,
+            capturer_ref=args.capturer_ref,
         )
-        return 0
+    except (FileNotFoundError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"wrote {args.baseline_dir / MANIFEST_FILENAME}")
+    print(
+        f"  host_id={manifest.host_id}  "
+        f"samples={manifest.sample_count}  "
+        f"sha={manifest.sample_sha256[:12]}…"
+    )
+    return 0
 
-    if args.cmd == "verify":
-        try:
-            verify_manifest(args.baseline_dir)
-        except (FileNotFoundError, ValueError) as e:
-            print(f"FAIL {args.baseline_dir}: {e}", file=sys.stderr)
-            return 1
-        print(f"{args.baseline_dir}: manifest ok")
-        return 0
 
-    return 2  # unreachable — argparse refuses an unknown cmd first
+def _cmd_verify(args: argparse.Namespace) -> int:
+    try:
+        verify_manifest(args.baseline_dir, baseline_filename=args.baseline_filename)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"FAIL {args.baseline_dir}: {e}", file=sys.stderr)
+        return 1
+    print(f"{args.baseline_dir}: manifest ok")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: `python -m synthaea_ml.data.manifest {write,verify}`.
+
+    Returns:
+        Exit code: 0 on success, 1 on an operation failure (baseline mutated,
+        manifest missing), 2 on a usage error (unknown flag, bad datetime).
+    """
+    args = _build_parser().parse_args(argv)
+    if args.cmd == "write":
+        return _cmd_write(args)
+    return _cmd_verify(args)  # argparse refuses any cmd but write/verify
+
+
+# Kept because tests and the console script call it under this name.
+_main = main
 
 
 if __name__ == "__main__":
-    import sys
-
-    sys.exit(_main())
+    sys.exit(main())
