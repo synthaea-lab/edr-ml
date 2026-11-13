@@ -42,6 +42,7 @@ import ipaddress
 from typing import Any
 
 from synthaea_ml.features.posix import has_write_intent
+from synthaea_ml.units import NS_PER_MILLISECOND
 
 # ── Rust mirror constants ──────────────────────────────────────────────────────
 
@@ -111,6 +112,13 @@ def _is_external(e: dict[str, Any]) -> bool:
 # ── Main extraction ────────────────────────────────────────────────────────────
 
 
+def _elapsed_ms(start_ns: int | None, end_ns: int | None) -> float:
+    """Milliseconds from `start_ns` to `end_ns`, clamped at 0; 0 when either is missing."""
+    if start_ns is None or end_ns is None:
+        return 0.0
+    return max(0.0, (end_ns - start_ns) / NS_PER_MILLISECOND)
+
+
 def extract_behavior_features(events: list[dict[str, Any]]) -> list[float]:
     """Extracts the 9 behavioral features from a PID's event sequence within
     its sliding window.
@@ -139,15 +147,8 @@ def extract_behavior_features(events: list[dict[str, Any]]) -> list[float]:
     first_connect_ns = connect_events[0]["ts_ns"] if connect_events else None
     first_filewrite_ns = write_events[0]["ts_ns"] if write_events else None
 
-    if first_exec_ns is not None and first_connect_ns is not None:
-        time_exec_to_connect_ms = max(0.0, (first_connect_ns - first_exec_ns) / 1_000_000)
-    else:
-        time_exec_to_connect_ms = 0.0
-
-    if first_exec_ns is not None and first_filewrite_ns is not None:
-        time_exec_to_filewrite_ms = max(0.0, (first_filewrite_ns - first_exec_ns) / 1_000_000)
-    else:
-        time_exec_to_filewrite_ms = 0.0
+    time_exec_to_connect_ms = _elapsed_ms(first_exec_ns, first_connect_ns)
+    time_exec_to_filewrite_ms = _elapsed_ms(first_exec_ns, first_filewrite_ns)
 
     # Suspicious path — PID's first exec, judged on its `image_path` (as Rust does). Only an
     # exec event without `image_path` falls back to the first NUL-separated `cmdline`

@@ -1,6 +1,10 @@
 """ML-030: the nanosecond constants keep their values."""
 
-from synthaea_ml.units import NS_PER_HOUR, NS_PER_SECOND
+from synthaea_ml.units import NS_PER_HOUR, NS_PER_MILLISECOND, NS_PER_SECOND
+
+
+def test_ns_per_millisecond_is_one_million() -> None:
+    assert NS_PER_MILLISECOND == 1_000_000
 
 
 def test_ns_per_second_is_one_billion() -> None:
