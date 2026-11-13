@@ -29,9 +29,19 @@ The result also records the sidecar's SHA-256, the time, and the environment
 (`platform.system()`, `platform.release()`, `platform.machine()`). Techniques that fired but are
 not expected are ignored.
 
-`run_replay` does not run the scenario; it starts from an `alerts.ndjson` produced elsewhere. No
-command-line entry point calls it yet, and no trainer writes replays into a record. When a record
-does carry replays, the provenance gate re-verifies them ([registry.md](registry.md#provenance-gate)).
+`run_replay` does not run the scenario; it starts from an `alerts.ndjson` produced elsewhere.
+
+### Recording a replay
+
+A replay validates the agent running a trained model, so it is recorded after training, not by
+the trainers: deploy the model on a lab machine, run the scenario there (the rig's scenario
+runner), bring its `alerts.ndjson` back, and run
+[`synthaea-ml-record-replay`](cli.md#synthaea-ml-record-replay). It reads the sidecar from the
+`scenarios` sibling checkout, the directory the provenance gate checks against, and adds the
+result to the record's `scenario_replays`. A rerun in the same environment (OS, kernel, arch)
+replaces the replay it repeats; runs on other machines are kept beside it. A failed replay is
+recorded too: the record states what the run showed, and the gate decides what ships. The
+provenance gate re-verifies every recorded replay ([registry.md](registry.md#provenance-gate)).
 
 ## Robustness
 

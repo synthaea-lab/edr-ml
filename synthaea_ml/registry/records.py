@@ -7,7 +7,7 @@ Frozen dataclasses only, plus the scenario passing criterion that the writer cac
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 SCHEMA_VERSION = 3
 """Bumped only when a field changes in a way that breaks readers.
@@ -234,6 +234,19 @@ class TrainingRecord:
     extra: dict[str, str] = field(default_factory=dict)
     conformal_calibration: ConformalCalibration | None = None
     feature_bounds: FeatureBounds | None = None
+
+
+def with_scenario_replay(record: TrainingRecord, replay: ScenarioReplayResult) -> TrainingRecord:
+    """``record`` with ``replay`` appended, in place of an earlier replay of the same scenario
+    in the same environment: a rerun supersedes the run it repeats, while runs of one
+    scenario on different machines each stay recorded."""
+    others = [
+        earlier
+        for earlier in record.scenario_replays
+        if (earlier.scenario_name, earlier.environment)
+        != (replay.scenario_name, replay.environment)
+    ]
+    return replace(record, scenario_replays=[*others, replay])
 
 
 # ── Passing criterion (ADR-0009 § Passing criterion) ────────────────────────

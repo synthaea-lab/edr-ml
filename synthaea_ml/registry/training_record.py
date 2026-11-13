@@ -53,6 +53,7 @@ from synthaea_ml.registry.codec import (
     load_training_record,
     record_from_dict,
     record_to_dict,
+    save_training_record,
     write_training_record,
 )
 from synthaea_ml.registry.dataset_binding import (
@@ -101,6 +102,7 @@ __all__ = [
     "load_training_record",
     "record_from_dict",
     "record_to_dict",
+    "save_training_record",
     "verify_dataset_version",
     "verify_robustness_card",
     "verify_scenario_replay",

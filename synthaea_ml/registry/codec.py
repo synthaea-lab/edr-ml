@@ -176,7 +176,12 @@ def write_training_record(
         conformal_calibration=conformal_calibration,
         feature_bounds=feature_bounds,
     )
+    save_training_record(model_dir, record)
+    return record
 
+
+def save_training_record(model_dir: Path, record: TrainingRecord) -> None:
+    """Write ``record`` as ``model_dir/model_record.json``, replacing any earlier one."""
     # The release gate hashes these bytes, so they must not depend on the OS that wrote
     # them: text mode alone would write CRLF on Windows (#8).
     (model_dir / MODEL_RECORD_FILENAME).write_text(
@@ -184,7 +189,6 @@ def write_training_record(
         encoding="utf-8",
         newline="\n",
     )
-    return record
 
 
 # ── Read ────────────────────────────────────────────────────────────────────

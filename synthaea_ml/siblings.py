@@ -34,6 +34,12 @@ def path(repo: str, *parts: str) -> Path:
     return root().joinpath(repo, *parts)
 
 
+def scenario_sidecars() -> Path:
+    """The directory of the scenario sidecars (``<name>.yaml``) that replays and robustness
+    cards bind to, inside the ``scenarios`` sibling."""
+    return path("scenarios", "scenarios")
+
+
 def required() -> bool:
     """Whether a missing sibling must fail rather than skip (set by CI)."""
     return os.environ.get(REQUIRE_ENV) == "1"
