@@ -76,7 +76,7 @@ def test_correlation_aggregator_warns_and_skips_invalid_lines(
     )
 
     with caplog.at_level(logging.WARNING):
-        events = aggregate_correlation.charger_events(capture)
+        events = aggregate_correlation.load_events(capture)
     assert [e["pid"] for e in events] == [1, 2]
     assert [r.getMessage().split(" invalid:")[0] for r in caplog.records] == [
         f"{capture} line 2",
@@ -86,7 +86,7 @@ def test_correlation_aggregator_warns_and_skips_invalid_lines(
 
 def test_correlation_aggregator_exits_when_the_capture_is_missing(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exited:
-        aggregate_correlation.charger_events(tmp_path / "events.jsonl")
+        aggregate_correlation.load_events(tmp_path / "events.jsonl")
     assert exited.value.code == 1
 
 

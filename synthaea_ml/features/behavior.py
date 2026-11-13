@@ -1,6 +1,6 @@
 """Per-PID behavioral feature extraction — mirror of BehaviorVector (Rust).
 
-These 9 features complement the 9 cmdline features from features.py to form an
+These 9 features complement the 9 cmdline features from cmdline.py to form an
 18D vector intended for training the behavioral ML model (phase 2).
 
 Input format: list of events for a given PID.

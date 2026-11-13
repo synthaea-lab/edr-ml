@@ -1,5 +1,5 @@
 """Converts a raw agent events.jsonl capture into a benign JSONL baseline
-consumable by train.py (cmdline isolation-forest).
+consumable by train_linux.py (cmdline isolation-forest).
 
 Reads the JSON-Lines format produced by the agent (`crates/schema::Event`):
     {"type": "exec", "meta": {...}, "cmdline": "...", "argv": [...], ...}

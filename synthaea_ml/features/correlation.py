@@ -1,5 +1,5 @@
 """Extraction of the "multi-events per pid" feature vector, for a second ML scorer — a
-complement to the cmdline vector (`features.py`), never merged with it into a single model
+complement to the cmdline vector (`cmdline.py`), never merged with it into a single model
 (decision of 2026-08-27, see docs/design/design-correlation-ml-vector.md).
 
 **Must stay in sync with the Rust mirror** (crates/synthaea-ml/src/correlation_features.rs):

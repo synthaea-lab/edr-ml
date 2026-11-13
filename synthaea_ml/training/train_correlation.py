@@ -1,10 +1,10 @@
 """Trains an Isolation Forest on the correlation vectors (2nd ML scorer) and exports it to ONNX.
 
 SKELETON — waiting for the first real dataset: a `correlation_train.jsonl` produced by
-`aggregate_correlation.py` from an `edr-cli capture-events` lab session
+`synthaea-ml-aggregate-correlation` from an `edr-cli capture-events` lab session
 (~10-15 min of normal activity). See `docs/design/design-correlation-ml-vector.md`.
 
-Scorer **distinct** from the cmdline scorer (`train_linux.py` / `train.py`): never the same
+Scorer **distinct** from the cmdline scorer (`train_linux.py`): never the same
 model file, never merged into a single feature space (decision of 2026-08-27). The model is
 loaded on the Rust side by a future `CorrelationScorer` (not yet
 written) then injected as an LLR term into the correlator's `update_belief()` (architecture to
