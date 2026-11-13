@@ -49,10 +49,10 @@ from synthaea_ml.units import NS_PER_SECOND
 __all__ = [
     "LEGACY_OUT_PATH",
     "RAW_EVENT_TYPES",
-    "charger_events",
     "flatten_wire_event",
+    "load_events",
     "main",
-    "vecteurs_par_pid",
+    "vectors_by_pid",
 ]
 
 LEGACY_OUT_PATH = Path(__file__).parents[1] / "training" / "data" / CORRELATION_DATASET_FILENAME
@@ -60,7 +60,7 @@ LEGACY_OUT_PATH = Path(__file__).parents[1] / "training" / "data" / CORRELATION_
 reads them. Deprecated: it lies inside the package source tree."""
 
 
-def charger_events(path: Path) -> list[FlatEvent]:
+def load_events(path: Path) -> list[FlatEvent]:
     """Loads the usable events from events.jsonl (exec/connect/file_open), flattened by
     `flatten_wire_event` to the shape `correlation.py` expects."""
     events: list[FlatEvent] = []
@@ -78,25 +78,30 @@ def charger_events(path: Path) -> list[FlatEvent]:
     return events
 
 
-def vecteurs_par_pid(
+def vectors_by_pid(
     events: list[FlatEvent], window_ns: int, min_events: int
 ) -> list[CorrelationVector]:
     """One `extract_features` per PID, over its window at its last appearance."""
-    par_pid: dict[int, list[FlatEvent]] = defaultdict(list)
+    by_pid: dict[int, list[FlatEvent]] = defaultdict(list)
     for e in events:
-        par_pid[e["pid"]].append(e)
+        by_pid[e["pid"]].append(e)
 
     out: list[CorrelationVector] = []
-    for pid, pid_events in sorted(par_pid.items()):
+    for pid, pid_events in sorted(by_pid.items()):
         pid_events.sort(key=lambda e: e["ts_ns"])
         last_ts = pid_events[-1]["ts_ns"]
         cutoff = last_ts - window_ns
-        fenetre = [e for e in pid_events if e["ts_ns"] >= cutoff]
-        if len(fenetre) < min_events:
+        window = [e for e in pid_events if e["ts_ns"] >= cutoff]
+        if len(window) < min_events:
             continue
-        feats = extract_features(fenetre, pid)
+        feats = extract_features(window, pid)
         out.append({"pid": pid, "features": feats, "feature_names": list(FEATURE_NAMES)})
     return out
+
+
+# Deprecated French aliases, kept one release while callers move to the English names (#38).
+charger_events = load_events
+vecteurs_par_pid = vectors_by_pid
 
 
 @dataclass(frozen=True)
@@ -155,19 +160,19 @@ def parse_args(argv: Sequence[str] | None = None) -> AggregateCorrelationArgs:
 def run(args: AggregateCorrelationArgs) -> int:
     """Write one correlation vector per PID of the event log; returns the exit status, 1 when
     the log has no usable event."""
-    events = charger_events(args.events)
+    events = load_events(args.events)
     if not events:
         print("[error] no usable events in the log.", file=sys.stderr)
         return 1
 
-    vecteurs = vecteurs_par_pid(events, int(args.window_s * NS_PER_SECOND), args.min_events)
+    vectors = vectors_by_pid(events, int(args.window_s * NS_PER_SECOND), args.min_events)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as f:
-        for v in vecteurs:
+        for v in vectors:
             f.write(json.dumps(v) + "\n")
 
     print(
-        f"{len(events)} events → {len(vecteurs)} vectors "
+        f"{len(events)} events → {len(vectors)} vectors "
         f"(1 per PID, window {args.window_s:g}s, min-events {args.min_events}) → {args.out}"
     )
     return 0

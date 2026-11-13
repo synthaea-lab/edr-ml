@@ -5,7 +5,7 @@ Input: the agent's own `events.jsonl` (`crates/schema::Event` JSON: identity nes
 one exec record per **process incarnation** `(pid, process_generation)`, carrying the
 command line, the parent lineage and `correlation_features`: the eight window features of
 that process, computed over `[last_ts - window, last_ts]` exactly like
-`aggregate_correlation.vecteurs_par_pid` (the 2026-09-02 "most complete instant for a PID"
+`aggregate_correlation.vectors_by_pid` (the 2026-09-02 "most complete instant for a PID"
 decision) and filtered by incarnation like `EventBus::events_for_pid` (#590), so a recycled
 pid's earlier life never feeds the next one.
 

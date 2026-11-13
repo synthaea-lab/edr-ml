@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from synthaea_ml.data.aggregate_correlation import charger_events, vecteurs_par_pid
+from synthaea_ml.data.aggregate_correlation import load_events, vectors_by_pid
 
 OUT = Path(__file__).resolve().parents[1]  # tests/fixtures/
 S = 1_000_000_000
@@ -122,7 +122,7 @@ EVENTS = [
 events_path = OUT / "capture_events.jsonl"
 events_path.write_text("".join(json.dumps(e) + "\n" for e in EVENTS), encoding="utf-8")
 
-vectors = vecteurs_par_pid(charger_events(events_path), window_ns=60 * S, min_events=1)
+vectors = vectors_by_pid(load_events(events_path), window_ns=60 * S, min_events=1)
 golden_path = OUT / "capture_correlation_golden.jsonl"
 golden_path.write_text("".join(json.dumps(v) + "\n" for v in vectors), encoding="utf-8")
 
