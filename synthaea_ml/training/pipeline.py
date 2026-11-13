@@ -104,7 +104,9 @@ def write_scorer_metadata(
             "max_values": bounds.max_values,
         },
     }
-    path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    # LF on every OS, like `model_record.json`: the same model gives the same bytes on
+    # Windows, so the file can be hashed into a record or manifest later (#57).
+    path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def evaluate_robustness(

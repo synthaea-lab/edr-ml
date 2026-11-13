@@ -51,6 +51,15 @@ def test_the_onnx_export_uses_the_pinned_opsets(tmp_path: Path) -> None:
     assert opsets[""] == pipeline.ONNX_TARGET_OPSET[""]
 
 
+def test_the_scorer_metadata_is_written_with_lf_line_endings_on_every_os(tmp_path: Path) -> None:
+    forest = _forest()
+    path = tmp_path / "model_metadata.json"
+    pipeline.write_scorer_metadata(path, forest.calibration, forest.bounds)
+    raw = path.read_bytes()
+    assert b"\r" not in raw
+    assert raw.endswith(b"}\n")
+
+
 def test_the_scorer_metadata_is_the_threshold_and_the_bounds(tmp_path: Path) -> None:
     forest = _forest()
     path = tmp_path / "model_metadata.json"
